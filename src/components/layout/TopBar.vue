@@ -1,22 +1,30 @@
 <script setup lang="ts">
 import { Icon } from "@iconify/vue";
 import { computed } from "vue";
-import { useWorkspaceStore, type Scope } from "@/stores/workspace";
 import { storeToRefs } from "pinia";
+import { useConfigStore, type ConfigScope } from "@/stores/config";
+import { basename } from "@/composables/useClaudeConfigAccessors";
 
-const workspace = useWorkspaceStore();
-const { scope } = storeToRefs(workspace);
+const configStore = useConfigStore();
+const { scope, focusedProjectPath, activeProjectEntry } = storeToRefs(configStore);
 
 const scopeLabel = computed(() =>
-  scope.value === "workspace" ? "Workspace" : "Global",
-);
-const scopeSub = computed(() =>
-  scope.value === "workspace" ? "skillful-claude" : "All projects",
+  scope.value === "project" ? "Project" : "Global",
 );
 
+// "Global" → "All projects". "Project" → basename of the focused path, or
+// a hint if nothing's focused yet. Prevents the previous hard-coded
+// "skillful-claude" literal from leaking into unrelated workspaces.
+const scopeSub = computed(() => {
+  if (scope.value === "global") return "All projects";
+  if (activeProjectEntry.value) return basename(activeProjectEntry.value.path);
+  if (focusedProjectPath.value) return basename(focusedProjectPath.value);
+  return "No project selected";
+});
+
 function toggleScope() {
-  const next: Scope = scope.value === "workspace" ? "global" : "workspace";
-  workspace.setScope(next);
+  const next: ConfigScope = scope.value === "project" ? "global" : "project";
+  configStore.setScope(next);
 }
 </script>
 
@@ -78,7 +86,7 @@ function toggleScope() {
       <div
         class="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-[11px] font-semibold text-surface"
       >
-        AR
+        <Icon icon="lucide:user" class="h-4 w-4" />
       </div>
     </div>
   </header>

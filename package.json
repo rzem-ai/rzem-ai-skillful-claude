@@ -1,13 +1,15 @@
 {
-  "name": "skillful-claude",
+  "name": "rzem-ai-skillful-claude",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri:dev": "env -u GTK_PATH -u GIO_MODULE_DIR tauri dev",
+    "tauri:build": "npm run build && env -u GTK_PATH -u GIO_MODULE_DIR tauri build",
+    "tauri:icons": "tauri icon public/icon.png"
   },
   "dependencies": {
     "@iconify/vue": "^5.0.0",

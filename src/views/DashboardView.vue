@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { markRaw, ref } from "vue";
+import { computed, markRaw } from "vue";
+import { storeToRefs } from "pinia";
 import { VueFlow, useVueFlow, type Edge, type Node } from "@vue-flow/core";
 import { Background } from "@vue-flow/background";
 import { MiniMap } from "@vue-flow/minimap";
 import ClaudeMdNode from "@/components/canvas/ClaudeMdNode.vue";
 import SkillNode from "@/components/canvas/SkillNode.vue";
 import CanvasToolbar from "@/components/canvas/CanvasToolbar.vue";
+import { useConfigStore } from "@/stores/config";
+import { basename } from "@/composables/useClaudeConfigAccessors";
 
 // Vue Flow expects custom node types to be registered (not reactive).
 const nodeTypes = {
@@ -13,65 +16,138 @@ const nodeTypes = {
   skill: markRaw(SkillNode),
 };
 
-// Seed graph mirroring the design's hierarchy: a root CLAUDE.md (global) → two
-// project CLAUDE.md files → SKILLS branches.
-const initialNodes: Node[] = [
-  {
+const configStore = useConfigStore();
+const { config } = storeToRefs(configStore);
+
+// Layout: a simple column/row placement driven by array index. Root on top,
+// one project column per live project, skills below each column. A dagre
+// auto-layout would look nicer but is a follow-up — the priority here is
+// that every node/edge corresponds to a real file on disk.
+const ROOT_X = 500;
+const ROOT_Y = 20;
+const PROJECT_ROW_Y = 160;
+const SKILL_ROW_Y = 300;
+const COLUMN_WIDTH = 220;
+const SKILL_STACK_STEP = 52;
+
+const nodes = computed<Node[]>(() => {
+  if (!config.value) return [];
+  const out: Node[] = [];
+
+  // Root: the global CLAUDE.md. Always present as a node even when the file
+  // itself is missing — it's the conceptual anchor the rest of the graph
+  // hangs off — but we tag `missing` in `data` so the node can style itself.
+  const globalMd = config.value.userClaudeMd;
+  out.push({
     id: "root",
     type: "claudemd",
-    position: { x: 470, y: 20 },
-    data: { label: "CLAUDE.md", sub: "global" },
-  },
-  {
-    id: "claude-a",
-    type: "claudemd",
-    position: { x: 80, y: 130 },
-    data: { label: "CLAUDE.md" },
-  },
-  {
-    id: "claude-b",
-    type: "claudemd",
-    position: { x: 600, y: 130 },
-    data: { label: "CLAUDE.md" },
-  },
-  { id: "s1", type: "skill", position: { x: 320, y: 80 }, data: {} },
-  { id: "s2", type: "skill", position: { x: 330, y: 160 }, data: {} },
-  { id: "s3", type: "skill", position: { x: 480, y: 160 }, data: {} },
-  { id: "s4", type: "skill", position: { x: 830, y: 80 }, data: {} },
-  { id: "s5", type: "skill", position: { x: 830, y: 160 }, data: {} },
-  {
-    id: "claude-c",
-    type: "claudemd",
-    position: { x: 80, y: 490 },
-    data: { label: "CLAUDE.md", sub: "binary-tools" },
-  },
-  { id: "s6", type: "skill", position: { x: 330, y: 430 }, data: {} },
-];
+    position: { x: ROOT_X, y: ROOT_Y },
+    data: {
+      label: "CLAUDE.md",
+      sub: "global",
+      missing: globalMd === null,
+    },
+  });
 
-const initialEdges: Edge[] = [
-  { id: "e-root-a", source: "root", target: "claude-a" },
-  { id: "e-root-b", source: "root", target: "claude-b" },
-  { id: "e-a-s1", source: "claude-a", target: "s1" },
-  { id: "e-a-s2", source: "claude-a", target: "s2" },
-  { id: "e-a-c", source: "claude-a", target: "claude-c" },
-  { id: "e-b-s4", source: "claude-b", target: "s4" },
-  { id: "e-b-s5", source: "claude-b", target: "s5" },
-  { id: "e-c-s6", source: "claude-c", target: "s6" },
-];
+  // Global skills splay to the left of the root.
+  config.value.userSkills.forEach((skill, i) => {
+    out.push({
+      id: `skill-g-${skill.path}`,
+      type: "skill",
+      position: {
+        x: ROOT_X - COLUMN_WIDTH - 40,
+        y: ROOT_Y + i * SKILL_STACK_STEP,
+      },
+      data: { label: skill.name ?? basename(skill.path) },
+    });
+  });
 
-const nodes = ref<Node[]>(initialNodes);
-const edges = ref<Edge[]>(initialEdges);
+  // Projects with CLAUDE.md get a column; their local skills stack beneath.
+  // We only show projects whose directory still exists and that have at
+  // least one real file to show (CLAUDE.md OR local skills).
+  const projectsToRender = config.value.projects.filter(
+    (p) => p.exists && (p.claudeMd !== null || p.localSkills.length > 0),
+  );
+
+  projectsToRender.forEach((project, colIdx) => {
+    const columnX = 40 + colIdx * COLUMN_WIDTH;
+    const projectNodeId = `project-${project.path}`;
+
+    if (project.claudeMd) {
+      out.push({
+        id: projectNodeId,
+        type: "claudemd",
+        position: { x: columnX, y: PROJECT_ROW_Y },
+        data: {
+          label: "CLAUDE.md",
+          sub: basename(project.path),
+        },
+      });
+    }
+
+    project.localSkills.forEach((skill, i) => {
+      out.push({
+        id: `skill-p-${project.path}-${skill.path}`,
+        type: "skill",
+        position: {
+          x: columnX,
+          y: SKILL_ROW_Y + i * SKILL_STACK_STEP,
+        },
+        data: { label: skill.name ?? basename(skill.path) },
+      });
+    });
+  });
+
+  return out;
+});
+
+const edges = computed<Edge[]>(() => {
+  if (!config.value) return [];
+  const out: Edge[] = [];
+
+  // Root → global skills
+  config.value.userSkills.forEach((skill) => {
+    out.push({
+      id: `e-root-skill-g-${skill.path}`,
+      source: "root",
+      target: `skill-g-${skill.path}`,
+    });
+  });
+
+  // Root → project CLAUDE.md → project skills
+  const projectsToRender = config.value.projects.filter(
+    (p) => p.exists && (p.claudeMd !== null || p.localSkills.length > 0),
+  );
+  projectsToRender.forEach((project) => {
+    const projectNodeId = `project-${project.path}`;
+
+    if (project.claudeMd) {
+      out.push({
+        id: `e-root-${projectNodeId}`,
+        source: "root",
+        target: projectNodeId,
+      });
+    }
+
+    project.localSkills.forEach((skill) => {
+      const skillNodeId = `skill-p-${project.path}-${skill.path}`;
+      out.push({
+        id: `e-${projectNodeId}-${skillNodeId}`,
+        source: project.claudeMd ? projectNodeId : "root",
+        target: skillNodeId,
+      });
+    });
+  });
+
+  return out;
+});
 
 const { zoomIn, zoomOut, fitView } = useVueFlow();
 
+// The add-node button used to push fake seed nodes. It's a no-op until we
+// decide what "add node" means against real on-disk files.
 function onAddNode() {
-  const id = `node-${nodes.value.length + 1}`;
-  nodes.value.push({
-    id,
-    type: "claudemd",
-    position: { x: 200, y: 300 },
-    data: { label: "CLAUDE.md", sub: "new" },
-  });
+  /* no-op placeholder until tied to a real create-file flow */
 }
 </script>
 
@@ -88,29 +164,6 @@ function onAddNode() {
         {{ nodes.length }} nodes · {{ edges.length }} edges
       </span>
     </div>
-
-    <div
-      class="flex h-[34px] items-center gap-0.5 rounded-lg border border-line bg-surface p-[3px]"
-    >
-      <button
-        type="button"
-        class="rounded-md px-3.5 text-[12px] font-medium text-body transition hover:bg-page"
-      >
-        In
-      </button>
-      <button
-        type="button"
-        class="rounded-md bg-strong px-3.5 py-1 text-[12px] font-semibold text-surface"
-      >
-        Out
-      </button>
-      <button
-        type="button"
-        class="rounded-md px-3.5 text-[12px] font-medium text-body transition hover:bg-page"
-      >
-        Reset
-      </button>
-    </div>
   </div>
 
   <CanvasToolbar
@@ -124,8 +177,8 @@ function onAddNode() {
     class="relative flex-1 overflow-hidden rounded-xl border border-line bg-canvas"
   >
     <VueFlow
-      v-model:nodes="nodes"
-      v-model:edges="edges"
+      :nodes="nodes"
+      :edges="edges"
       :node-types="nodeTypes"
       :default-viewport="{ x: 0, y: 0, zoom: 1 }"
       fit-view-on-init

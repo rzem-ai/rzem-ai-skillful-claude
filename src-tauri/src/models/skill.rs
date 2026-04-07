@@ -15,4 +15,5 @@ pub struct Skill {
     pub frontmatter: BTreeMap<String, serde_json::Value>,
     pub body: String,
     pub sha256: String,
+    pub modified_at: Option<i64>,
 }

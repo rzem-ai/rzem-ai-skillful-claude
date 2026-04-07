@@ -2,13 +2,17 @@
 import { Icon } from "@iconify/vue";
 import { useRoute, RouterLink } from "vue-router";
 import { computed } from "vue";
+import { storeToRefs } from "pinia";
+import { useConfigStore, globalClaudeMdId } from "@/stores/config";
+import { tildify } from "@/composables/useClaudeConfigAccessors";
 
 interface NavItem {
   to: string;
   label: string;
   icon: string;
   sub?: string;
-  badge?: string;
+  badge?: string | number;
+  onClick?: () => void;
 }
 
 interface NavSection {
@@ -16,7 +20,22 @@ interface NavSection {
   items: NavItem[];
 }
 
-const sections: NavSection[] = [
+const configStore = useConfigStore();
+const { config, sidebarBadges } = storeToRefs(configStore);
+
+// The CLAUDE.md sidebar entry's subtitle is the real path on disk, collapsed
+// to `~` for display. When the global CLAUDE.md is missing we still show a
+// hint so the row isn't empty.
+const claudeMdSub = computed(() => {
+  const md = config.value?.userClaudeMd;
+  if (!md) return "~/.claude/CLAUDE.md";
+  return tildify(md.path, config.value?.home ?? null);
+});
+
+// Whole sidebar structure is reactive: badge counts and the CLAUDE.md
+// subtitle recompute whenever the store reloads. Anything that isn't driven
+// by data (titles, routes, icons) stays static.
+const sections = computed<NavSection[]>(() => [
   {
     title: "INSTRUCTIONS",
     items: [
@@ -24,13 +43,14 @@ const sections: NavSection[] = [
         to: "/instructions/claude-md",
         label: "CLAUDE.md",
         icon: "lucide:file-text",
-        sub: "~/.claude/CLAUDE.md",
+        sub: claudeMdSub.value,
+        onClick: () => configStore.selectEntry(globalClaudeMdId()),
       },
       {
         to: "/instructions/overrides",
         label: "Project overrides",
         icon: "lucide:folder",
-        badge: "3",
+        badge: sidebarBadges.value.projectOverrideCount,
       },
     ],
   },
@@ -41,13 +61,13 @@ const sections: NavSection[] = [
         to: "/skills/browse",
         label: "Browse skills",
         icon: "lucide:sparkles",
-        badge: "26",
+        badge: sidebarBadges.value.totalSkillCount,
       },
       {
         to: "/skills/active",
         label: "Active here",
         icon: "lucide:circle-check",
-        badge: "8",
+        badge: sidebarBadges.value.activeSkillCount,
       },
     ],
   },
@@ -59,11 +79,11 @@ const sections: NavSection[] = [
         to: "/tools/mcp",
         label: "MCP servers",
         icon: "lucide:plug",
-        badge: "4",
+        badge: sidebarBadges.value.mcpServerCount,
       },
     ],
   },
-];
+]);
 
 const route = useRoute();
 const activePath = computed(() => route.path);
@@ -125,6 +145,7 @@ function isActive(path: string) {
             ? 'border border-brand-tint-border bg-brand-tint'
             : 'border border-transparent hover:bg-page'
         "
+        @click="item.onClick?.()"
       >
         <Icon
           :icon="item.icon"
@@ -138,7 +159,7 @@ function isActive(path: string) {
           </span>
         </div>
         <span
-          v-if="item.badge"
+          v-if="item.badge !== undefined"
           class="flex h-[18px] items-center justify-center rounded-full bg-page px-1.5 text-[10px] font-semibold text-soft"
         >
           {{ item.badge }}
