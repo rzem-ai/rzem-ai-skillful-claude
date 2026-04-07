@@ -1,0 +1,76 @@
+@import "tailwindcss";
+@plugin "tailwindcss-primeui";
+
+/* Vue Flow base styles */
+@import "@vue-flow/core/dist/style.css";
+@import "@vue-flow/core/dist/theme-default.css";
+@import "@vue-flow/controls/dist/style.css";
+@import "@vue-flow/minimap/dist/style.css";
+@import "@vue-flow/node-resizer/dist/style.css";
+
+/* Milkdown nord theme */
+@import "@milkdown/theme-nord/style.css";
+
+/*
+ * Design tokens lifted from design/claude-config-ui.pen.
+ * Tailwind v4 reads these via @theme so utilities like `bg-page`,
+ * `text-strong`, `border-line` work out of the box.
+ */
+@theme {
+  --color-page: #f4f6f9;
+  --color-surface: #ffffff;
+  --color-line: #e5e9f0;
+
+  --color-strong: #0b1220;
+  --color-body: #475569;
+  --color-muted: #94a3b8;
+  --color-soft: #64748b;
+
+  --color-brand: #2f5bff;
+  --color-brand-tint: #eef2ff;
+  --color-brand-tint-border: #dce3ff;
+
+  --color-claude: #7872b5;
+  --color-claude-shadow: #7872b540;
+  --color-skill: #ee8e83;
+  --color-skill-shadow: #ee8e8340;
+  --color-edge: #b6b0c7;
+  --color-canvas: #fcfcfe;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+:root {
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  background: var(--color-page);
+  color: var(--color-strong);
+}
+
+/* Vue Flow visual tweaks to match the design's edge color and node shadow. */
+.vue-flow__edge-path {
+  stroke: var(--color-edge);
+  stroke-width: 1.5;
+}
+.vue-flow__background {
+  background-color: var(--color-canvas);
+}
+
+/* Milkdown is happiest when its host gives it a max-width and prose styling. */
+.milkdown {
+  width: 100%;
+}
+.milkdown .editor {
+  outline: none;
+  min-height: 320px;
+}
