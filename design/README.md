@@ -4,7 +4,7 @@ Durable record of the design intent for the Skillful Claude UI (a Tauri app
 for managing global / project `CLAUDE.md` and `SKILLS.md` files, plus tool /
 MCP configuration).
 
-The Pencil source file (`claude-config-ui.pen`) is held in memory by the
+The Pencil source file (`skillful-claude-ui.pen`) is held in memory by the
 Pencil MCP server and may not always be present on disk. This README plus the
 exported PNGs in `exports/` is the artifact a fresh Claude Code session can
 rebuild from without needing the original `.pen`.
@@ -15,7 +15,7 @@ rebuild from without needing the original `.pen`.
 
 | Path | Role |
 |---|---|
-| `claude-config-ui.pen` | Pencil source — when on disk, open with `open_document` for true continuity. |
+| `skillful-claude-ui.pen` | Pencil source — when on disk, open with `open_document` for true continuity. |
 | `exports/01-global-claude-md-editor.png` | Screen 1 reference render |
 | `exports/02-dashboard-claude-skills-graph.png` | Screen 2 reference render |
 | `exports/03-project-claude-md-merged.png` | Screen 3 reference render |
@@ -193,10 +193,10 @@ The toggle is the conceptual heart of the screen — it lets the user flip betwe
 
 ## Rebuilding from scratch
 
-If `claude-config-ui.pen` is missing and a new Claude session needs to recreate the design:
+If `skillful-claude-ui.pen` is missing and a new Claude session needs to recreate the design:
 
 1. **Read this file and the three PNGs in `exports/`** for visual anchor.
-2. `mcp__pencil__open_document({filePathOrTemplate: "/home/alex/Dev/Work/rzem-ai-skillful-claude/design/claude-config-ui.pen"})`. This creates a fresh in-memory document at that path (the file won't actually exist on disk; that's fine, the document lives in the MCP server's memory).
+2. `mcp__pencil__open_document({filePathOrTemplate: "/home/alex/Dev/Work/rzem-ai-skillful-claude/design/skillful-claude-ui.pen"})`. This creates a fresh in-memory document at that path (the file won't actually exist on disk; that's fine, the document lives in the MCP server's memory).
 3. Use `mcp__pencil__get_guidelines({category: "guide", name: "Web App"})` and `... name: "Design System"` for layout / composition idioms. Skip the `style` guide — we don't use it; colors are hardcoded from the table above.
 4. Build screens with `batch_design`. Useful conventions:
    - Each screen is a top-level frame in `document` with absolute `x` (screen 1 at `x: 0`, screen 2 at `x: 1500`, screen 3 at `x: 3000`, all `y: 0`)
