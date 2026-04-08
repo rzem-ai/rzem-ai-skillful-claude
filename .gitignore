@@ -10,8 +10,16 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-builds
+out
 *.local
+*.tsbuildinfo
 releases
+
+# Playwright E2E
+playwright-report
+test-results
+/e2e/.auth
 
 # Editor directories and files
 .vscode/*
@@ -27,10 +35,11 @@ releases
 # Per-user Claude Code settings
 .claude/
 
-# Tauri updater signing keys — never commit
+# Code-signing material — never commit
 *.key
 *.pem
-tauri-signing-private.key
+*.p12
+*.cer
 
 # Local env
 .env

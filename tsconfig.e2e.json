@@ -4,8 +4,12 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
-    "types": ["node", "electron"],
+    // E2E test bodies run both Node-side (Playwright fixtures, child
+    // process spawn) and inside page.evaluate() callbacks (which execute
+    // in the renderer's Chromium). We include both libs so either side
+    // type-checks with the right globals.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
@@ -17,8 +21,7 @@
     "noEmit": true
   },
   "include": [
-    "electron/**/*.ts",
-    "electron.vite.config.ts",
-    "vite.config.ts"
+    "playwright.config.ts",
+    "e2e/**/*.ts"
   ]
 }

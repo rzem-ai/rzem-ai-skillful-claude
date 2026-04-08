@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { storeToRefs } from "pinia";
 import { useConfigStore } from "@/stores/config";
 import { basename, tildify } from "@/composables/useClaudeConfigAccessors";
-import type { Skill } from "@/composables/useTauriFs";
+import type { Skill } from "@/composables/useDesktopApi";
 
 const configStore = useConfigStore();
 const { config, allSkills } = storeToRefs(configStore);

@@ -6,7 +6,7 @@ import {
   type ClaudeMd,
   type ProjectEntry,
   type Skill,
-} from "@/composables/useTauriFs";
+} from "@/composables/useDesktopApi";
 import {
   getAllowedTools,
   getDisabledTools,
@@ -75,6 +75,20 @@ export const useConfigStore = defineStore("config", () => {
   /** Projects that actually have a `{path}/CLAUDE.md` on disk. */
   const projectsWithClaudeMd = computed<ProjectEntry[]>(
     () => liveProjects.value.filter((p) => p.claudeMd !== null),
+  );
+
+  /**
+   * Live projects that have *any* on-disk override — CLAUDE.md, local
+   * settings, or local skills. This is the same set ProjectOverridesView
+   * lists, exposed here so the sidebar badge stays in sync with the view.
+   */
+  const overrideProjects = computed<ProjectEntry[]>(
+    () => liveProjects.value.filter(
+      (p) =>
+        p.claudeMd !== null ||
+        p.localSettings !== null ||
+        p.localSkills.length > 0,
+    ),
   );
 
   /**
@@ -162,7 +176,7 @@ export const useConfigStore = defineStore("config", () => {
   });
 
   const sidebarBadges = computed<SidebarBadges>(() => ({
-    projectOverrideCount: projectsWithClaudeMd.value.length,
+    projectOverrideCount: overrideProjects.value.length,
     totalSkillCount: allSkills.value.length,
     activeSkillCount: activeSkillCount.value,
     mcpServerCount: allMcpServers.value.length,
@@ -303,6 +317,7 @@ export const useConfigStore = defineStore("config", () => {
     // getters
     liveProjects,
     projectsWithClaudeMd,
+    overrideProjects,
     allSkills,
     activeProjectEntry,
     allMcpServers,

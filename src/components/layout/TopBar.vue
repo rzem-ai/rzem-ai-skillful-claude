@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { storeToRefs } from "pinia";
 import { useConfigStore, type ConfigScope } from "@/stores/config";
 import { basename } from "@/composables/useClaudeConfigAccessors";
+import iconUrl from "@/assets/icon.svg";
 
 const configStore = useConfigStore();
 const { scope, focusedProjectPath, activeProjectEntry } = storeToRefs(configStore);
@@ -35,9 +36,7 @@ function toggleScope() {
     <!-- Left: brand + scope selector -->
     <div class="flex items-center gap-6">
       <div class="flex items-center gap-3">
-        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-strong">
-          <Icon icon="lucide:sparkles" class="h-4 w-4 text-surface" />
-        </div>
+        <img :src="iconUrl" alt="Skillful Claude" class="h-8 w-8 rounded-lg" />
         <span class="text-[15px] font-semibold text-strong">Skillful Claude</span>
       </div>
 

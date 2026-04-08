@@ -4,64 +4,69 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this app is
 
-Skillful Claude is a Tauri 2 + Vue 3 desktop app for managing `CLAUDE.md` files and SKILLS (`SKILL.md` + frontmatter) across a developer's projects and global Claude config. The dashboard renders the relationship between a global root `CLAUDE.md`, project `CLAUDE.md` files, and the SKILLS attached to each as a Vue Flow graph. The Rust backend reads/writes those files; the Vue frontend edits them.
+Skillful Claude is an Electron 33 + Vue 3 desktop app for managing `CLAUDE.md` and `SKILL.md` files across a developer's projects and global Claude config. The dashboard renders their relationships as a Vue Flow graph; the main process reads/writes the files and shells out to the bundled `vercel-labs/skills` CLI.
 
-## Commands
-
-```bash
-# Frontend-only dev (Vite, port 1420 — strict, fails if taken)
-npm run dev
-
-# Full desktop dev loop (spawns Vite + Rust). The env -u stripping of
-# GTK_PATH/GIO_MODULE_DIR works around Linux GTK conflicts and is required.
-npm run tauri:dev
-
-# Type-check + build the web bundle into ./dist
-npm run build
-
-# Full release build (web bundle + native bundles)
-npm run tauri:build
-
-# Regenerate app icons from public/icon.png
-npm run tauri:icons
-```
-
-There is no test runner or linter wired up yet. `vue-tsc --noEmit` (run as part of `npm run build`) is the only static check.
-
-The two `build-release-*.sh` scripts wrap `tauri build` per-platform: they bundle each target separately (`deb`/`rpm`/`appimage` on Linux, `app`/`dmg`/`ios` on macOS) to dodge a "Text file busy" error you hit when bundling them all in one invocation, then collect artifacts into `releases/`. Note these scripts still print "SpriteChat" in their log lines — leftover from a template, not a different product.
+See `README.md` for build, run, and release commands. There is no test runner or linter wired up — `npm run typecheck` is the only static check.
 
 ## Architecture
 
-### Two halves, one IPC seam
+### Three processes, one IPC seam
 
-- **Frontend (`src/`)** — Vue 3 + `<script setup>`, Pinia, Vue Router (web history), PrimeVue (Aura preset, dark mode via `.dark` selector), Tailwind v4 (config-less, tokens defined in `src/styles/main.css` via `@theme`), Vue Flow for the canvas, Milkdown for markdown editing. The `@/*` alias points at `src/`.
-- **Backend (`src-tauri/src/`)** — Rust, async Tokio for FS, `walkdir` for scanning, `gray_matter` (YAML engine) for SKILL frontmatter parsing, `sha2` for content hashing. Plugins enabled: `fs`, `dialog`, `updater`, `sql` (sqlite). The capability allow-list lives in `src-tauri/capabilities/default.json` — adding new FS/dialog/updater operations means updating both the Rust handler and that JSON.
+This is a standard Electron app split into three processes, each built as a separate bundle by `electron-vite`:
 
-The seam between them is a small set of `#[tauri::command]`s registered in `src-tauri/src/lib.rs` and mirrored as typed wrappers in `src/composables/useTauriFs.ts`. **When adding a command, always update both sides plus the capabilities file.** Models in `src-tauri/src/models/` use `#[serde(rename_all = "camelCase")]` so Rust `snake_case` fields become JS `camelCase` — keep the TS interface in `useTauriFs.ts` in sync.
+- **Main (`electron/main/`)** — Node.js. Owns the BrowserWindow, the filesystem, the auto-updater, and the spawned `vercel-labs/skills` CLI. Entry: `electron/main/index.ts`. Modules:
+  - `fs.ts` — port of the old Rust file commands. Scans workspaces for `CLAUDE.md` / `SKILL.md`, parses YAML frontmatter via `gray-matter`, hashes content with Node `crypto`.
+  - `config.ts` — port of the global config loader. Walks `~/.claude.json`, `~/.claude/{settings.json,CLAUDE.md,skills/**}`, and per-project files.
+  - `skills-cli.ts` — wraps the bundled `skills` npm package as a child process. Both one-shot (`runSkillsCli`) and streaming (`startSkillsCli` → chunk events) variants.
+  - `updater.ts` — `electron-updater` wired to GitHub Releases. No-ops in dev.
+  - `ipc.ts` — registers every `ipcMain.handle(...)` channel. Single source of truth for the IPC surface.
+- **Preload (`electron/preload/`)** — sandboxed bridge. Uses `contextBridge.exposeInMainWorld("api", api)` to expose typed wrappers around each IPC channel. The renderer sees `window.api.fs.scanWorkspace(...)`, `window.api.skills.exec(...)`, etc. Type declarations live in `electron/preload/api.d.ts`.
+- **Renderer (`src/`)** — the Vue 3 app. Unchanged from the Tauri version except that the IPC composable is now `src/composables/useDesktopApi.ts` (forwarding to `window.api.*`) instead of the old `useTauriFs.ts` (which called `invoke()`).
+
+The IPC surface is `<namespace>:<verb>` (`fs:scanWorkspace`, `config:load`, `skills:run`, `skills:exec`, `skills:cancel`, `updater:check`, etc.). **When adding a command, update all three layers**: the main-side handler (`electron/main/`), the preload bridge (`electron/preload/index.ts` + `api.d.ts`), and the renderer composable (`src/composables/useDesktopApi.ts`). They're coupled by design — the bridge is the only seam.
 
 ### File classification is centralized
 
-`src-tauri/src/commands/files.rs` is the heart of the backend. Every read/write command starts by calling `classify(&path)`, which only accepts files literally named `CLAUDE.md` or `SKILL.md`. Anything else returns `AppError::UnsupportedFile`. If you add a new managed file type (e.g. `settings.json`), extend `WorkspaceEntryKind`, `classify`, and the scanner's filter together — they're coupled by design so the app can't accidentally write to arbitrary paths.
+`electron/main/fs.ts` is the heart of the backend. Every read/write command starts by calling `classify(path)`, which only accepts files literally named `CLAUDE.md` or `SKILL.md`. Anything else throws `AppError("UnsupportedFile", path)`. If you add a new managed file type (e.g. `settings.json`), extend the `WorkspaceEntryKind` union, `classify()`, and the scanner's filter together — they're coupled by design so the app can't accidentally write to arbitrary paths.
 
-`scan_workspace` is depth-limited (`MAX_SCAN_DEPTH = 8`) and skips `node_modules`, `.git`, `target`, `dist`, `.next`, `.venv`. This is intentional protection against the user accidentally pointing it at `/` or a huge monorepo — preserve those guards.
+`scanWorkspace` is depth-limited (`MAX_SCAN_DEPTH = 8`) and skips `node_modules`, `.git`, `target`, `dist`, `.next`, `.venv`. This is intentional protection against the user accidentally pointing it at `/` or a huge monorepo — preserve those guards. Implemented as a manual recursive walk (not `fs.readdir { recursive: true }`) so we can prune skipped directories *before* recursing into them.
+
+### vercel-labs/skills integration
+
+The `skills` package (currently `^1.4.9`) is shipped as a runtime dependency. We never call its internals — we spawn the CLI binary as a child process via `spawn(process.execPath, [entry, ...args], { env: { ELECTRON_RUN_AS_NODE: "1" } })`, which uses Electron's bundled Node interpreter so we don't depend on `node`/`npx` being on the user's PATH.
+
+In packaged builds, `skills` lives in `app.asar.unpacked/node_modules/skills` (see `electron-builder.yml` → `asarUnpack`), because asar-archived files can't be executed directly. `skills-cli.ts` falls back to that path when `require.resolve` can't find it.
+
+The streaming variant (`startSkillsCli`) returns a `jobId` and pipes stdout/stderr chunks back via `webContents.send("skills:chunk", ...)` so the **PrimeVue Terminal view** (`src/views/SkillsTerminalView.vue`) can render output live as the CLI runs. The view tracks the active jobId and forwards each chunk into `TerminalService.emit("response", line)` after stripping ANSI escapes.
+
+### Auto-update
+
+`electron-updater` is configured to read from GitHub Releases (provider: `github`, owner: `rzem-ai`, repo: `rzem-ai-skillful-claude` — see `electron-builder.yml` → `publish`). In development the updater is a no-op because `app.isPackaged` is false. The renderer can call `window.api.updater.check()` and listen on `window.api.updater.onStatus(...)` for progress events. See `README.md` for the release-publishing steps.
 
 ### Frontend state model
 
-A single Pinia store (`src/stores/workspace.ts`) holds the currently scanned workspace: `scope` (workspace vs global), `root`, `entries`, plus loading/error. Views subscribe to this; they don't call `invoke` themselves — they go through `useTauriFs.ts` wrappers so the IPC surface stays in one place.
+A single Pinia store (`src/stores/workspace.ts`) holds the currently scanned workspace: `scope` (workspace vs global), `root`, `entries`, plus loading/error. A second store (`src/stores/config.ts`) holds the loaded `~/.claude.json` tree. Views subscribe to both stores; they don't call IPC themselves — everything goes through `useDesktopApi.ts` so the boundary stays in one place.
 
 Routes are sidebar-driven: each route in `src/router/index.ts` carries a `meta.sidebar` key the `SideBar` component reads to highlight the active section. Adding a top-level page = new route + matching sidebar entry.
 
 ### Canvas (`DashboardView`)
 
-The graph uses Vue Flow with two custom node types (`ClaudeMdNode`, `SkillNode`) registered via `markRaw` — Vue Flow requires non-reactive node type maps. Today the dashboard seeds a hard-coded sample graph; the real wiring to `workspace.entries` is still TODO. When you connect them, remember Vue Flow node `id`s must be stable strings (don't use array indexes that shift on add/remove).
+The graph uses Vue Flow with two custom node types (`ClaudeMdNode`, `SkillNode`) registered via `markRaw` — Vue Flow requires non-reactive node type maps. Nodes and edges are derived from the loaded `useConfigStore`: a single `root` node for the global `~/.claude/CLAUDE.md`, one column per live project that has either a `CLAUDE.md` or local skills, and skill nodes stacked beneath each column. Edges connect root → global skills and root → project CLAUDE.md → project skills (or root → skill directly when a project has skills but no `CLAUDE.md`). The layout is index-driven for now; a dagre auto-layout is a follow-up. Node `id`s are stable composite strings (`skill-g-${path}`, `project-${path}`, etc.) so they survive adds/removes without reordering.
 
 ### Design tokens
 
-Tailwind v4 reads color tokens (`--color-page`, `--color-claude`, `--color-skill`, etc.) from `@theme` in `src/styles/main.css`, so utilities like `bg-page`, `text-strong`, `border-line` work without a `tailwind.config.js`. The palette is lifted from `design/claude-config-ui.pen` — keep new components on these tokens rather than hex literals so dark mode and theme changes stay consistent.
+Tailwind v4 reads color tokens (`--color-page`, `--color-claude`, `--color-skill`, etc.) from `@theme` in `src/styles/main.css`, so utilities like `bg-page`, `text-strong`, `border-line` work without a `tailwind.config.js`. The palette is lifted from `design/skillful-claude-ui.pen` — keep new components on these tokens rather than hex literals so dark mode and theme changes stay consistent.
+
+### Icons
+
+The full platform-specific icon set under `build/` is generated from a single SVG source at `design/icon-source.svg` by `scripts/build-icons.mjs` (runnable as `npm run icons`). The script uses `sharp` to render the SVG to a 1024×1024 PNG and `electron-icon-builder` to emit `build/icon.icns`, `build/icon.ico`, and `build/icons/<size>x<size>.png` for Linux. The current SVG is a brand-orange squircle with a sparkle glyph as a placeholder — drop a real vector source in at the same path and re-run `npm run icons` to ship polished artwork.
 
 ## Things to know
 
-- The Tauri config's `beforeDevCommand`/`beforeBuildCommand` use **pnpm**, but the active lockfile is `package-lock.json` (npm) — `pnpm-lock.yaml` is stale. Run `npm` commands directly; if you go through `tauri dev`, it'll still try to spawn `pnpm dev`. Either install pnpm or invoke `vite`/`npm run dev` and `tauri dev` separately.
-- The updater plugin is enabled but `tauri.conf.json` still has placeholder values (`releases.example.com`, `REPLACE_WITH_TAURI_SIGNER_PUBKEY`). Don't ship a real release without filling these in.
+- **ESM all the way**: `package.json` has `"type": "module"`. The main process is ESM, so `__dirname` doesn't exist — derive it via `dirname(fileURLToPath(import.meta.url))` (already done in `electron/main/index.ts`).
+- **Sandbox is off**: ESM preloads require `sandbox: false` on the BrowserWindow. The renderer is still safely walled off via `contextIsolation: true` + `nodeIntegration: false` — the only way for renderer code to reach Node is through the preload bridge.
+- **Updater publish target is real**: `electron-builder.yml` points at `rzem-ai/rzem-ai-skillful-claude` on GitHub. Don't run `npm run release` from a fork or you'll publish to the wrong repo.
+- **`asarUnpack` matters**: the `skills` CLI must remain in `asarUnpack` or `child_process.spawn` can't execute it inside a packaged app.
+- **Updates panel**: Settings → Updates surfaces `window.api.updater.{check,onStatus,quitAndInstall}`. It shows the running version (from `app.getVersion()`), the live download progress, and an "Install & restart" button that becomes visible once an update has been downloaded. In dev the buttons render but the underlying calls no-op because `app.isPackaged` is false; the panel makes that explicit with an inline notice.
 - Per-user Claude Code settings live in `.claude/` and are gitignored — don't commit anything there.
-- The `_lib` suffix on the Rust crate (`skillful_claude_lib`) is a Windows linker workaround per the comment in `Cargo.toml`; leave it alone.
+- `electron-log` writes main-process logs to the standard per-OS path under `app.getPath("userData")`. Useful for debugging "why didn't the updater fire" in a packaged build.
