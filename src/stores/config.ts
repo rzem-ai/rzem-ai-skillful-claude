@@ -6,7 +6,7 @@ import {
   type ClaudeMd,
   type ProjectEntry,
   type Skill,
-} from "@/composables/useTauriFs";
+} from "@/composables/useDesktopApi";
 import {
   getAllowedTools,
   getDisabledTools,

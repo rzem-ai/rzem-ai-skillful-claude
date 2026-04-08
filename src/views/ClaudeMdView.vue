@@ -4,14 +4,14 @@ import { computed, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import MilkdownEditor from "@/components/editor/MilkdownEditor.vue";
 import { useConfigStore } from "@/stores/config";
-import { writeClaudeMd } from "@/composables/useTauriFs";
+import { writeClaudeMd } from "@/composables/useDesktopApi";
 import {
   basename,
   formatBytes,
   relativeTime,
   tildify,
 } from "@/composables/useClaudeConfigAccessors";
-import type { ProjectEntry } from "@/composables/useTauriFs";
+import type { ProjectEntry } from "@/composables/useDesktopApi";
 
 const configStore = useConfigStore();
 const {

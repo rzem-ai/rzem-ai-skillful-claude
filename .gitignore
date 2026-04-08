@@ -10,7 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-builds
+out
 *.local
+*.tsbuildinfo
 releases
 
 # Editor directories and files
@@ -27,10 +30,11 @@ releases
 # Per-user Claude Code settings
 .claude/
 
-# Tauri updater signing keys — never commit
+# Code-signing material — never commit
 *.key
 *.pem
-tauri-signing-private.key
+*.p12
+*.cer
 
 # Local env
 .env

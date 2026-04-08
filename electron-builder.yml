@@ -1,0 +1,70 @@
+appId: ai.rzem.skillful-claude
+productName: Skillful Claude
+copyright: Copyright © 2026 Rzem AI
+
+# Pull files from electron-vite's build output (out/) plus the renderer
+# bundle. `node_modules` is included implicitly because we leave certain
+# packages outside the asar via `asarUnpack`.
+files:
+  - out/**/*
+  - package.json
+  - "!**/*.map"
+
+# `asar: true` packs everything into app.asar EXCEPT the entries listed
+# in `asarUnpack`, which are extracted to app.asar.unpacked. We unpack:
+#   - skills            : the bundled CLI we spawn via child_process —
+#                         must live as real files on disk so Node can
+#                         require/execute it.
+#   - electron-updater  : has native dependencies on some platforms.
+asar: true
+asarUnpack:
+  - "node_modules/skills/**/*"
+  - "node_modules/electron-updater/**/*"
+
+directories:
+  buildResources: build
+  output: dist-builds
+
+# ── Auto-update via GitHub Releases ────────────────────────────────────
+# electron-updater reads this same config from app-update.yml at runtime.
+# CI publishes draft releases via `npm run release` (which sets
+# --publish=always). Bumping `version` in package.json + creating a tag
+# triggers the upload.
+publish:
+  provider: github
+  owner: rzem-ai
+  repo: rzem-ai-skillful-claude
+  releaseType: release
+
+# ── Per-platform targets ───────────────────────────────────────────────
+
+linux:
+  target:
+    - AppImage
+    - deb
+    - rpm
+  category: Development
+  icon: build/icons
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true

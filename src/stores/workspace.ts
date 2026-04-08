@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { scanWorkspace, type WorkspaceEntry, type WorkspaceScan } from "@/composables/useTauriFs";
+import { scanWorkspace, type WorkspaceEntry, type WorkspaceScan } from "@/composables/useDesktopApi";
 
 export type Scope = "workspace" | "global";
 

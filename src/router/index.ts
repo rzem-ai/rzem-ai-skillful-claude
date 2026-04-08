@@ -36,6 +36,12 @@ const routes: RouteRecordRaw[] = [
     meta: { sidebar: "active-skills" },
   },
   {
+    path: "/skills/terminal",
+    name: "skills-terminal",
+    component: () => import("@/views/SkillsTerminalView.vue"),
+    meta: { sidebar: "skills-terminal" },
+  },
+  {
     path: "/tools/builtin",
     name: "builtin-tools",
     component: () => import("@/views/BuiltinToolsView.vue"),

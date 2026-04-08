@@ -69,6 +69,12 @@ const sections = computed<NavSection[]>(() => [
         icon: "lucide:circle-check",
         badge: sidebarBadges.value.activeSkillCount,
       },
+      {
+        to: "/skills/terminal",
+        label: "Terminal",
+        icon: "lucide:terminal",
+        sub: "vercel-labs/skills",
+      },
     ],
   },
   {

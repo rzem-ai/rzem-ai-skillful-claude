@@ -9,7 +9,7 @@ import {
   getDisabledTools,
   tildify,
 } from "@/composables/useClaudeConfigAccessors";
-import type { Skill } from "@/composables/useTauriFs";
+import type { Skill } from "@/composables/useDesktopApi";
 
 const configStore = useConfigStore();
 const { config, allSkills, activeProjectEntry } = storeToRefs(configStore);
