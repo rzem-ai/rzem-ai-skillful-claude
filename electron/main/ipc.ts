@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from "electron";
+import { ipcMain, dialog, app, BrowserWindow } from "electron";
 import log from "electron-log/main";
 
 import {
@@ -96,6 +96,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle("skills:cancel", async (_e, jobId: string) =>
     cancelSkillsJob(jobId),
   );
+
+  // ── app meta (version + packaged state for the Updates panel) ─────────
+  ipcMain.handle("app:meta", async () => ({
+    version: app.getVersion(),
+    name: app.getName(),
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    arch: process.arch,
+  }));
 
   // ── updater ────────────────────────────────────────────────────────────
   ipcMain.handle("updater:check", async () => checkForUpdatesNow());

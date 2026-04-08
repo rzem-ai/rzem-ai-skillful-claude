@@ -88,6 +88,14 @@ export interface SkillsExitEvent {
   killed: boolean;
 }
 
+export interface AppMeta {
+  version: string;
+  name: string;
+  isPackaged: boolean;
+  platform: string;
+  arch: string;
+}
+
 export interface UpdaterStatus {
   kind:
     | "checking"
@@ -122,6 +130,9 @@ export interface DesktopApi {
     cancel: (jobId: string) => Promise<boolean>;
     onChunk: (handler: (event: SkillsChunkEvent) => void) => () => void;
     onExit: (handler: (event: SkillsExitEvent) => void) => () => void;
+  };
+  app: {
+    meta: () => Promise<AppMeta>;
   };
   updater: {
     check: () => Promise<{ ok: boolean; message?: string }>;

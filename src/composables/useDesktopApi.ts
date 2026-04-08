@@ -6,6 +6,7 @@
 // forward to `window.api.*` instead of `invoke()`.
 
 import type {
+  AppMeta,
   ClaudeConfig,
   ClaudeMd,
   ProjectEntry,
@@ -22,6 +23,7 @@ import type {
 } from "../../electron/preload/api";
 
 export type {
+  AppMeta,
   ClaudeConfig,
   ClaudeMd,
   ProjectEntry,
@@ -102,6 +104,12 @@ export function onSkillsExit(
   handler: (event: SkillsExitEvent) => void,
 ): () => void {
   return window.api.skills.onExit(handler);
+}
+
+// ── app meta ───────────────────────────────────────────────────────────
+
+export function getAppMeta(): Promise<AppMeta> {
+  return window.api.app.meta();
 }
 
 // ── updater ────────────────────────────────────────────────────────────

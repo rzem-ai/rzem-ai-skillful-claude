@@ -44,6 +44,14 @@ interface UpdaterStatus {
   message?: string;
 }
 
+interface AppMeta {
+  version: string;
+  name: string;
+  isPackaged: boolean;
+  platform: string;
+  arch: string;
+}
+
 const api = {
   // ── fs / config ──────────────────────────────────────────────────────
   fs: {
@@ -96,6 +104,11 @@ const api = {
       ipcRenderer.on("skills:exit", wrapped);
       return () => ipcRenderer.off("skills:exit", wrapped);
     },
+  },
+
+  // ── app meta ─────────────────────────────────────────────────────────
+  app: {
+    meta: (): Promise<AppMeta> => ipcRenderer.invoke("app:meta"),
   },
 
   // ── updater ──────────────────────────────────────────────────────────

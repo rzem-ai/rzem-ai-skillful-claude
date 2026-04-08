@@ -83,11 +83,15 @@ Routes are sidebar-driven: each route in `src/router/index.ts` carries a `meta.s
 
 ### Canvas (`DashboardView`)
 
-The graph uses Vue Flow with two custom node types (`ClaudeMdNode`, `SkillNode`) registered via `markRaw` — Vue Flow requires non-reactive node type maps. Today the dashboard seeds a hard-coded sample graph; the real wiring to `workspace.entries` is still TODO. When you connect them, remember Vue Flow node `id`s must be stable strings (don't use array indexes that shift on add/remove).
+The graph uses Vue Flow with two custom node types (`ClaudeMdNode`, `SkillNode`) registered via `markRaw` — Vue Flow requires non-reactive node type maps. Nodes and edges are derived from the loaded `useConfigStore`: a single `root` node for the global `~/.claude/CLAUDE.md`, one column per live project that has either a `CLAUDE.md` or local skills, and skill nodes stacked beneath each column. Edges connect root → global skills and root → project CLAUDE.md → project skills (or root → skill directly when a project has skills but no `CLAUDE.md`). The layout is index-driven for now; a dagre auto-layout is a follow-up. Node `id`s are stable composite strings (`skill-g-${path}`, `project-${path}`, etc.) so they survive adds/removes without reordering.
 
 ### Design tokens
 
 Tailwind v4 reads color tokens (`--color-page`, `--color-claude`, `--color-skill`, etc.) from `@theme` in `src/styles/main.css`, so utilities like `bg-page`, `text-strong`, `border-line` work without a `tailwind.config.js`. The palette is lifted from `design/skillful-claude-ui.pen` — keep new components on these tokens rather than hex literals so dark mode and theme changes stay consistent.
+
+### Icons
+
+The full platform-specific icon set under `build/` is generated from a single SVG source at `design/icon-source.svg` by `scripts/build-icons.mjs` (runnable as `npm run icons`). The script uses `sharp` to render the SVG to a 1024×1024 PNG and `electron-icon-builder` to emit `build/icon.icns`, `build/icon.ico`, and `build/icons/<size>x<size>.png` for Linux. The current SVG is a brand-orange squircle with a sparkle glyph as a placeholder — drop a real vector source in at the same path and re-run `npm run icons` to ship polished artwork.
 
 ## Things to know
 
@@ -95,5 +99,6 @@ Tailwind v4 reads color tokens (`--color-page`, `--color-claude`, `--color-skill
 - **Sandbox is off**: ESM preloads require `sandbox: false` on the BrowserWindow. The renderer is still safely walled off via `contextIsolation: true` + `nodeIntegration: false` — the only way for renderer code to reach Node is through the preload bridge.
 - **Updater publish target is real**: `electron-builder.yml` points at `rzem-ai/rzem-ai-skillful-claude` on GitHub. Don't run `npm run release` from a fork or you'll publish to the wrong repo.
 - **`asarUnpack` matters**: the `skills` CLI must remain in `asarUnpack` or `child_process.spawn` can't execute it inside a packaged app.
+- **Updates panel**: Settings → Updates surfaces `window.api.updater.{check,onStatus,quitAndInstall}`. It shows the running version (from `app.getVersion()`), the live download progress, and an "Install & restart" button that becomes visible once an update has been downloaded. In dev the buttons render but the underlying calls no-op because `app.isPackaged` is false; the panel makes that explicit with an inline notice.
 - Per-user Claude Code settings live in `.claude/` and are gitignored — don't commit anything there.
 - `electron-log` writes main-process logs to the standard per-OS path under `app.getPath("userData")`. Useful for debugging "why didn't the updater fire" in a packaged build.
