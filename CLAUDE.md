@@ -4,35 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this app is
 
-Skillful Claude is an Electron 33 + Vue 3 desktop app for managing `CLAUDE.md` files and SKILLS (`SKILL.md` + frontmatter) across a developer's projects and global Claude config. The dashboard renders the relationship between a global root `CLAUDE.md`, project `CLAUDE.md` files, and the SKILLS attached to each as a Vue Flow graph. The Electron main process reads/writes those files and shells out to the bundled `vercel-labs/skills` CLI; the Vue renderer edits them.
+Skillful Claude is an Electron 33 + Vue 3 desktop app for managing `CLAUDE.md` and `SKILL.md` files across a developer's projects and global Claude config. The dashboard renders their relationships as a Vue Flow graph; the main process reads/writes the files and shells out to the bundled `vercel-labs/skills` CLI.
 
-## Commands
-
-```bash
-# Full desktop dev loop (electron-vite spawns main + preload + renderer
-# with HMR for the renderer). Renderer dev server is on port 1420.
-npm run dev
-
-# Type-check then build all three bundles into ./out
-npm run build
-
-# Type-check only (vue-tsc on the renderer + tsc on the main process)
-npm run typecheck
-
-# Package distributables for the current host into ./dist-builds
-# (uses electron-builder, no publish)
-npm run package
-
-# Per-platform variants
-npm run package:linux    # AppImage, deb, rpm
-npm run package:mac      # dmg (x64 + arm64)
-npm run package:win      # nsis x64
-
-# Build and publish a release to GitHub Releases (drives auto-update)
-npm run release
-```
-
-There is no test runner or linter wired up yet. `npm run typecheck` (vue-tsc on `tsconfig.web.json` + tsc on `tsconfig.node.json`) is the only static check.
+See `README.md` for build, run, and release commands. There is no test runner or linter wired up — `npm run typecheck` is the only static check.
 
 ## Architecture
 
@@ -67,13 +41,7 @@ The streaming variant (`startSkillsCli`) returns a `jobId` and pipes stdout/stde
 
 ### Auto-update
 
-`electron-updater` is configured to read from GitHub Releases (provider: `github`, owner: `rzem-ai`, repo: `rzem-ai-skillful-claude` — see `electron-builder.yml` → `publish`). To ship a release:
-
-1. Bump `version` in `package.json`.
-2. Run `npm run release` (which builds, packages, and publishes).
-3. The CI environment must have `GH_TOKEN` set to a token with `repo` scope.
-
-In development the updater is a no-op because `app.isPackaged` is false. The renderer can call `window.api.updater.check()` and listen on `window.api.updater.onStatus(...)` for progress events.
+`electron-updater` is configured to read from GitHub Releases (provider: `github`, owner: `rzem-ai`, repo: `rzem-ai-skillful-claude` — see `electron-builder.yml` → `publish`). In development the updater is a no-op because `app.isPackaged` is false. The renderer can call `window.api.updater.check()` and listen on `window.api.updater.onStatus(...)` for progress events. See `README.md` for the release-publishing steps.
 
 ### Frontend state model
 

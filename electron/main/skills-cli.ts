@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { join, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { app } from "electron";
-import log from "electron-log/main";
+import log from "electron-log/main.js";
 
 /**
  * Wrapper around the `vercel-labs/skills` npm CLI.

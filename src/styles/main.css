@@ -8,9 +8,6 @@
 @import "@vue-flow/minimap/dist/style.css";
 @import "@vue-flow/node-resizer/dist/style.css";
 
-/* Milkdown nord theme */
-@import "@milkdown/theme-nord/style.css";
-
 /*
  * Design tokens lifted from design/claude-config-ui.pen.
  * Tailwind v4 reads these via @theme so utilities like `bg-page`,
@@ -66,11 +63,3 @@ body,
   background-color: var(--color-canvas);
 }
 
-/* Milkdown is happiest when its host gives it a max-width and prose styling. */
-.milkdown {
-  width: 100%;
-}
-.milkdown .editor {
-  outline: none;
-  min-height: 320px;
-}

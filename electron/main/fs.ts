@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, relative, sep } from "node:path";
 import matter from "gray-matter";
-import log from "electron-log/main";
+import log from "electron-log/main.js";
 
 // ── Models (mirror src/composables/useDesktopApi.ts) ────────────────────
 

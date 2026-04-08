@@ -2,7 +2,7 @@ import { app, BrowserWindow, shell } from "electron";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
-import log from "electron-log/main";
+import log from "electron-log/main.js";
 
 import { registerIpcHandlers } from "./ipc";
 import { initAutoUpdater } from "./updater";

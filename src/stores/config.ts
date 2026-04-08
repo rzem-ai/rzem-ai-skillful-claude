@@ -78,6 +78,20 @@ export const useConfigStore = defineStore("config", () => {
   );
 
   /**
+   * Live projects that have *any* on-disk override — CLAUDE.md, local
+   * settings, or local skills. This is the same set ProjectOverridesView
+   * lists, exposed here so the sidebar badge stays in sync with the view.
+   */
+  const overrideProjects = computed<ProjectEntry[]>(
+    () => liveProjects.value.filter(
+      (p) =>
+        p.claudeMd !== null ||
+        p.localSettings !== null ||
+        p.localSkills.length > 0,
+    ),
+  );
+
+  /**
    * Flat merged skill array, global first. This is what most views consume —
    * individual source (global vs project) can be recovered via `skill.path`.
    */
@@ -162,7 +176,7 @@ export const useConfigStore = defineStore("config", () => {
   });
 
   const sidebarBadges = computed<SidebarBadges>(() => ({
-    projectOverrideCount: projectsWithClaudeMd.value.length,
+    projectOverrideCount: overrideProjects.value.length,
     totalSkillCount: allSkills.value.length,
     activeSkillCount: activeSkillCount.value,
     mcpServerCount: allMcpServers.value.length,
@@ -303,6 +317,7 @@ export const useConfigStore = defineStore("config", () => {
     // getters
     liveProjects,
     projectsWithClaudeMd,
+    overrideProjects,
     allSkills,
     activeProjectEntry,
     allMcpServers,

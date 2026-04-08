@@ -1,5 +1,5 @@
 import { app, BrowserWindow } from "electron";
-import log from "electron-log/main";
+import log from "electron-log/main.js";
 import pkg from "electron-updater";
 
 // electron-updater is CommonJS-only; pull autoUpdater off the default

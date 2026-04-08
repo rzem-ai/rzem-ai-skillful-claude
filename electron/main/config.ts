@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import log from "electron-log/main";
+import log from "electron-log/main.js";
 
 import {
   AppError,

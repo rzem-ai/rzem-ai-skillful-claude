@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    // E2E test bodies run both Node-side (Playwright fixtures, child
+    // process spawn) and inside page.evaluate() callbacks (which execute
+    // in the renderer's Chromium). We include both libs so either side
+    // type-checks with the right globals.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true
+  },
+  "include": [
+    "playwright.config.ts",
+    "e2e/**/*.ts"
+  ]
+}

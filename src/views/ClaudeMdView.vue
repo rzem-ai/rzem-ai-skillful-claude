@@ -2,7 +2,8 @@
 import { Icon } from "@iconify/vue";
 import { computed, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
-import MilkdownEditor from "@/components/editor/MilkdownEditor.vue";
+import MonacoEditor from "@/components/editor/MonacoEditor.vue";
+import MarkdownPreview from "@/components/editor/MarkdownPreview.vue";
 import { useConfigStore } from "@/stores/config";
 import { writeClaudeMd } from "@/composables/useDesktopApi";
 import {
@@ -23,12 +24,22 @@ const {
 } = storeToRefs(configStore);
 
 // ── Editor buffer ──────────────────────────────────────────────────────
-// ProseMirror owns content after mount, so we track the working copy here
-// and the template uses `:key` on <MilkdownEditor> to force a fresh mount
-// whenever the selection points at a different file on disk.
+// Monaco owns its model once mounted; we track the working copy here so
+// the side panel can compute size/lines/dirty state, and the template
+// uses `:key` on <MonacoEditor> to force a fresh mount whenever the
+// selection points at a different file on disk.
 const editedBody = ref<string>(resolvedClaudeMd.value?.body ?? "");
 const saving = ref(false);
 const saveError = ref<string | null>(null);
+
+// Edit / Preview toggle. Defaults to "edit" because that's the primary
+// task in this view; switching to "preview" renders the working copy
+// (not the on-disk body) so the user can see unsaved changes formatted.
+type ViewMode = "edit" | "preview";
+const viewMode = ref<ViewMode>("edit");
+function setViewMode(mode: ViewMode) {
+  viewMode.value = mode;
+}
 
 watch(
   resolvedClaudeMd,
@@ -45,6 +56,17 @@ const isGlobalSelected = computed(() => {
   return id === null || id === "global:claudemd";
 });
 
+/**
+ * The user has clicked on the global CLAUDE.md entry, but the file itself
+ * doesn't exist on disk. This is distinct from "nothing selected" — we know
+ * which file they want, it just hasn't been created yet. The view shows a
+ * dedicated empty state for this case so the chrome stops contradicting
+ * itself ("Global instructions" header + "No CLAUDE.md selected" body).
+ */
+const isGlobalMissing = computed(
+  () => isGlobalSelected.value && (config.value?.userClaudeMd ?? null) === null,
+);
+
 const crumbSection = computed(() =>
   isGlobalSelected.value ? "Global" : "Project",
 );
@@ -54,8 +76,12 @@ const crumbCurrent = "CLAUDE.md";
 
 const headerSubtitle = computed(() => {
   const md = resolvedClaudeMd.value;
-  if (!md) return "No CLAUDE.md selected";
-  return tildify(md.path, config.value?.home ?? null);
+  if (md) return tildify(md.path, config.value?.home ?? null);
+  if (isGlobalMissing.value) {
+    const home = config.value?.home;
+    return home ? `${tildify(home, home)}/.claude/CLAUDE.md (not created)` : "~/.claude/CLAUDE.md (not created)";
+  }
+  return "No CLAUDE.md selected";
 });
 
 const editorTabLabel = computed(() => {
@@ -97,6 +123,7 @@ const tokenEstimate = computed(() => {
 });
 
 const stateLabel = computed(() => {
+  if (isGlobalMissing.value) return "Missing";
   if (!resolvedClaudeMd.value) return "Empty";
   return hasUnsavedChanges.value ? "Unsaved" : "Synced";
 });
@@ -107,11 +134,14 @@ const modifiedLabel = computed(() =>
 
 // ── Inheritance: which projects use this global CLAUDE.md ─────────────
 // Inheritance only makes sense for the *global* file — it's the root that
-// every project implicitly inherits from. Project CLAUDE.md files are
-// leaves in the chain, so we hide the "inherited by" card for those.
+// every project implicitly inherits from. A project that ships its own
+// CLAUDE.md effectively overrides the global one (Claude Code merges them
+// but the project file takes precedence), so we exclude those from the
+// "inherited by" set. Project CLAUDE.md files are leaves in the chain, so
+// we hide the "inherited by" card for those entirely.
 const inheritedByProjects = computed<ProjectEntry[]>(() => {
   if (!isGlobalSelected.value || !config.value) return [];
-  return config.value.projects.filter((p) => p.exists);
+  return config.value.projects.filter((p) => p.exists && p.claudeMd === null);
 });
 
 const inheritedByCount = computed(() => inheritedByProjects.value.length);
@@ -275,22 +305,34 @@ function onDiscard() {
           </div>
         </div>
         <div class="flex items-center gap-1.5">
-          <!-- Edit/Preview toggle: visual chrome for now. Milkdown is WYSIWYG, so
-               "Edit" is the only state that works. Preview is shown disabled. -->
+          <!-- Edit/Preview toggle: switches the editor body between the
+               Monaco markdown editor and a rendered HTML preview of the
+               *working copy* (so unsaved edits show up in the preview). -->
           <div
             class="flex h-[28px] items-center overflow-hidden rounded-md border border-line bg-surface"
           >
             <button
               type="button"
-              class="h-full bg-strong px-2.5 text-[11px] font-semibold text-surface"
+              class="h-full px-2.5 text-[11px] font-semibold transition"
+              :class="
+                viewMode === 'edit'
+                  ? 'bg-strong text-surface'
+                  : 'text-muted hover:bg-page'
+              "
+              @click="setViewMode('edit')"
             >
               Edit
             </button>
             <button
               type="button"
-              class="h-full px-2.5 text-[11px] font-medium text-muted disabled:cursor-not-allowed"
-              disabled
-              title="Preview mode coming soon"
+              class="h-full px-2.5 text-[11px] font-semibold transition"
+              :class="
+                viewMode === 'preview'
+                  ? 'bg-strong text-surface'
+                  : 'text-muted hover:bg-page'
+              "
+              :disabled="!resolvedClaudeMd"
+              @click="setViewMode('preview')"
             >
               Preview
             </button>
@@ -315,7 +357,23 @@ function onDiscard() {
       <!-- Editor body -->
       <div class="relative flex flex-1 flex-col overflow-y-auto px-6 py-5">
         <div
-          v-if="!resolvedClaudeMd"
+          v-if="isGlobalMissing"
+          data-testid="claude-md-missing-global"
+          class="flex h-full flex-col items-center justify-center gap-2 text-soft"
+        >
+          <Icon icon="lucide:file-plus" class="h-8 w-8" />
+          <p class="text-[13px] font-semibold text-strong">
+            Global CLAUDE.md doesn't exist yet
+          </p>
+          <p class="text-[11px]">
+            Claude Code will look for it at
+            <code class="font-mono text-[10px] text-body">~/.claude/CLAUDE.md</code>.
+            Create the file from your shell, then reload — the editor will
+            pick it up automatically.
+          </p>
+        </div>
+        <div
+          v-else-if="!resolvedClaudeMd"
           class="flex h-full flex-col items-center justify-center gap-2 text-soft"
         >
           <Icon icon="lucide:file-text" class="h-8 w-8" />
@@ -326,8 +384,8 @@ function onDiscard() {
         </div>
         <template v-else>
           <div
-            v-if="editedBody === '' && resolvedClaudeMd.body === ''"
-            class="pointer-events-none absolute inset-0 flex items-start px-6 py-5"
+            v-if="viewMode === 'edit' && editedBody === '' && resolvedClaudeMd.body === ''"
+            class="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start px-6 py-5"
           >
             <div class="flex items-center gap-2 text-[13px] italic text-muted">
               <Icon icon="lucide:pencil-line" class="h-4 w-4" />
@@ -337,10 +395,12 @@ function onDiscard() {
               </span>
             </div>
           </div>
-          <MilkdownEditor
+          <MonacoEditor
+            v-if="viewMode === 'edit'"
             :key="resolvedClaudeMd.path"
             v-model="editedBody"
           />
+          <MarkdownPreview v-else :source="editedBody" />
         </template>
       </div>
     </div>
