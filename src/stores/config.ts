@@ -13,9 +13,6 @@ import {
   getMcpServers,
 } from "@/composables/useClaudeConfigAccessors";
 
-/** Scope the UI is filtered by. `global` shows the union across all projects. */
-export type ConfigScope = "global" | "project";
-
 /**
  * Opaque id identifying a selectable entry. Encoded as a discriminated string
  * so it's trivial to round-trip through storage / URLs later. Callers should
@@ -62,7 +59,6 @@ export const useConfigStore = defineStore("config", () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const selectedEntryId = ref<EntryId | null>(null);
-  const scope = ref<ConfigScope>("global");
   const focusedProjectPath = ref<string | null>(null);
 
   // ── getters: projects & skills ───────────────────────────────────────
@@ -296,14 +292,8 @@ export const useConfigStore = defineStore("config", () => {
     selectedEntryId.value = id;
   }
 
-  function setScope(next: ConfigScope): void {
-    scope.value = next;
-    if (next === "global") focusedProjectPath.value = null;
-  }
-
   function setFocusedProject(path: string | null): void {
     focusedProjectPath.value = path;
-    if (path !== null) scope.value = "project";
   }
 
   return {
@@ -312,7 +302,6 @@ export const useConfigStore = defineStore("config", () => {
     loading,
     error,
     selectedEntryId,
-    scope,
     focusedProjectPath,
     // getters
     liveProjects,
@@ -328,7 +317,6 @@ export const useConfigStore = defineStore("config", () => {
     loadAll,
     reload,
     selectEntry,
-    setScope,
     setFocusedProject,
     // helpers exposed for tests / views that need to parse ids
     parseEntryId,

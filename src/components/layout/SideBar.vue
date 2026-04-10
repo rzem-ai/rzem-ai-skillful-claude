@@ -7,6 +7,7 @@ import {
   useConfigStore,
   globalClaudeMdId,
   projectClaudeMdId,
+  projectSettingsId,
 } from "@/stores/config";
 import { basename, tildify } from "@/composables/useClaudeConfigAccessors";
 import type { ProjectEntry } from "@/composables/useDesktopApi";
@@ -18,6 +19,13 @@ interface NavItem {
   sub?: string;
   badge?: string | number;
   onClick?: () => void;
+  /**
+   * Optional explicit active override. When present, the route match is
+   * ignored and this flag decides whether the row is highlighted. Used by
+   * the global CLAUDE.md entry, which shares a route with every project
+   * CLAUDE.md and therefore needs to disambiguate via `selectedEntryId`.
+   */
+  active?: boolean;
 }
 
 interface NavSection {
@@ -29,8 +37,23 @@ const PROJECT_OVERRIDES_PATH = "/instructions/overrides";
 
 const configStore = useConfigStore();
 const router = useRouter();
-const { config, sidebarBadges, overrideProjects, focusedProjectPath } =
-  storeToRefs(configStore);
+const {
+  config,
+  sidebarBadges,
+  overrideProjects,
+  focusedProjectPath,
+  selectedEntryId,
+} = storeToRefs(configStore);
+
+// The global CLAUDE.md row shares its route (`/instructions/claude-md`) with
+// every project CLAUDE.md, so route matching alone would keep it highlighted
+// while the user is editing a project-scoped file. Pin the highlight to the
+// actual selection instead, treating a null selection as "global" to mirror
+// the ClaudeMdView fallback.
+const isGlobalClaudeMdSelected = computed(() => {
+  const id = selectedEntryId.value;
+  return id === null || id === globalClaudeMdId();
+});
 
 // The CLAUDE.md sidebar entry's subtitle is the real path on disk, collapsed
 // to `~` for display. When the global CLAUDE.md is missing we say so
@@ -53,6 +76,7 @@ const sections = computed<NavSection[]>(() => [
         label: "CLAUDE.md",
         icon: "lucide:file-text",
         sub: claudeMdSub.value,
+        active: isGlobalClaudeMdSelected.value,
         onClick: () => configStore.selectEntry(globalClaudeMdId()),
       },
       {
@@ -105,6 +129,31 @@ const activePath = computed(() => route.path);
 
 function isActive(path: string) {
   return activePath.value === path;
+}
+
+// A NavItem row is "active" when its explicit flag is set, or — if no flag
+// was provided — when the current route matches. Keeping both paths lets
+// static entries stay route-driven while selection-sensitive entries (the
+// global CLAUDE.md) opt into their own criterion.
+function isNavItemActive(item: NavItem) {
+  return item.active ?? isActive(item.to);
+}
+
+// A project's CLAUDE.md file is the currently selected entry.
+function isProjectClaudeMdSelected(projectPath: string) {
+  return selectedEntryId.value === projectClaudeMdId(projectPath);
+}
+
+// True when any file inside a project is the active selection. Used to
+// suppress the project folder's focus dot so the visual indicator lives on
+// the file the user actually opened, not on its container.
+function projectHasSelectedFile(project: ProjectEntry) {
+  const id = selectedEntryId.value;
+  if (!id) return false;
+  if (id === projectClaudeMdId(project.path)) return true;
+  if (id === projectSettingsId(project.path)) return true;
+  if (id.startsWith(`project:${project.path}:skill:`)) return true;
+  return false;
 }
 
 // ── project overrides dropdown ──────────────────────────────────────────
@@ -325,7 +374,10 @@ function projectFileCount(project: ProjectEntry): number {
                 {{ basename(project.path) }}
               </span>
               <span
-                v-if="focusedProjectPath === project.path"
+                v-if="
+                  focusedProjectPath === project.path &&
+                  !projectHasSelectedFile(project)
+                "
                 class="h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
               />
             </button>
@@ -338,11 +390,20 @@ function projectFileCount(project: ProjectEntry): number {
               <button
                 v-if="project.claudeMd"
                 type="button"
-                class="flex items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] font-medium text-body transition hover:bg-page"
+                class="flex items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] font-medium transition"
+                :class="
+                  isProjectClaudeMdSelected(project.path)
+                    ? 'bg-brand-tint text-strong'
+                    : 'text-body hover:bg-page'
+                "
                 @click="openProjectClaudeMd(project.path)"
               >
                 <Icon icon="lucide:file-text" class="h-3 w-3 text-claude" />
-                <span class="truncate">CLAUDE.md</span>
+                <span class="flex-1 truncate">CLAUDE.md</span>
+                <span
+                  v-if="isProjectClaudeMdSelected(project.path)"
+                  class="h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
+                />
               </button>
               <div
                 v-if="project.localSettings"
@@ -379,7 +440,7 @@ function projectFileCount(project: ProjectEntry): number {
           :to="item.to"
           class="flex items-center gap-2.5 rounded-lg px-3 py-2.5 transition"
           :class="
-            isActive(item.to)
+            isNavItemActive(item)
               ? 'border border-brand-tint-border bg-brand-tint'
               : 'border border-transparent hover:bg-page'
           "
@@ -388,7 +449,7 @@ function projectFileCount(project: ProjectEntry): number {
           <Icon
             :icon="item.icon"
             class="h-4 w-4"
-            :class="isActive(item.to) ? 'text-brand' : 'text-muted'"
+            :class="isNavItemActive(item) ? 'text-brand' : 'text-muted'"
           />
           <div class="flex flex-1 flex-col leading-tight">
             <span class="text-[13px] font-medium text-body">{{ item.label }}</span>
@@ -403,7 +464,7 @@ function projectFileCount(project: ProjectEntry): number {
             {{ item.badge }}
           </span>
           <span
-            v-else-if="isActive(item.to)"
+            v-else-if="isNavItemActive(item)"
             class="h-1.5 w-1.5 rounded-full bg-brand"
           />
         </RouterLink>

@@ -3,11 +3,7 @@ import { Icon } from "@iconify/vue";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { storeToRefs } from "pinia";
-import {
-  useConfigStore,
-  projectClaudeMdId,
-  type ConfigScope,
-} from "@/stores/config";
+import { useConfigStore, projectClaudeMdId } from "@/stores/config";
 import { basename, tildify } from "@/composables/useClaudeConfigAccessors";
 
 const configStore = useConfigStore();
@@ -39,9 +35,6 @@ const activeCount = computed(
 function openProjectClaudeMd(projectPath: string, hasClaudeMd: boolean) {
   if (!hasClaudeMd) return;
   configStore.setFocusedProject(projectPath);
-  // Explicit cast: setFocusedProject flips scope to `project` already, but
-  // we keep the type import around for future places that need it.
-  void ("project" satisfies ConfigScope);
   configStore.selectEntry(projectClaudeMdId(projectPath));
   router.push("/instructions/claude-md");
 }
