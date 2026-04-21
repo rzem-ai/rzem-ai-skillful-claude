@@ -28,9 +28,20 @@ npm run package:win      # nsis x64
 
 # Build and publish a release to GitHub Releases (drives auto-update)
 npm run release
+
+# Regenerate the icon set from design/icon-source.svg
+npm run icons
+
+# Playwright end-to-end tests (builds with electron-vite first, then
+# drives the main bundle via @playwright/test's _electron helper).
+npm run e2e
+npm run e2e:headed
 ```
 
-There is no test runner or linter wired up yet. `npm run typecheck` (vue-tsc on `tsconfig.web.json` + tsc on `tsconfig.node.json`) is the only static check.
+`npm run typecheck` runs vue-tsc on `tsconfig.web.json` plus tsc on
+`tsconfig.node.json` and `tsconfig.e2e.json`. That, plus the Playwright
+e2e suite under `e2e/`, are the automated checks — there is no unit-test
+runner or linter wired up.
 
 ## Releasing
 

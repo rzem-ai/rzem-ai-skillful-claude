@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Skillful Claude is an Electron 33 + Vue 3 desktop app for managing `CLAUDE.md` and `SKILL.md` files across a developer's projects and global Claude config. The dashboard renders their relationships as a Vue Flow graph; the main process reads/writes the files and shells out to the bundled `vercel-labs/skills` CLI.
 
-See `README.md` for build, run, and release commands. There is no test runner or linter wired up — `npm run typecheck` is the only static check.
+See `README.md` for build, run, and release commands. Automated checks are `npm run typecheck` (vue-tsc on the renderer plus tsc on the main/e2e TS projects) and `npm run e2e` (Playwright driving the built Electron bundle via `_electron`, config in `playwright.config.ts`). There's no unit-test runner or linter wired up. E2E specs live under `e2e/` (`smoke`, `sidebar`, `claude-md-empty-state`).
 
 ## Architecture
 

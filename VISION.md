@@ -11,7 +11,7 @@ At runtime, Claude doesn't see these as separate files — it sees a single merg
 
 ## What Skillful Claude does
 
-It's a desktop app (Tauri 2 + Vue 3) that turns those scattered files into a single, navigable picture organised around scope and inheritance. Three screens carry the whole product:
+It's a desktop app (Electron 33 + Vue 3) that turns those scattered files into a single, navigable picture organised around scope and inheritance. Three screens carry the whole product:
 
 1. Global CLAUDE.md editor — edit ~/.claude/CLAUDE.md directly, with a side panel showing every project that inherits it, which projects override which lines, and recent edits. The point: when you change a global rule, you can see who it affects before you save.
 2. Dashboard — Claude & Skills graph — a node-graph canvas of every CLAUDE.md and SKILL.md in your world, drawn as connected pills. Purple pills are CLAUDE.md files, coral pills are skills, and the edges show which projects inherit from ~/.claude/. You can expand a node to see its contents inline. The point: a single visual answer to "what does Claude know about, and where does it come from?"
