@@ -1,8 +1,8 @@
 # Skillful Claude — Design Notes
 
-Durable record of the design intent for the Skillful Claude UI (a Tauri app
-for managing global / project `CLAUDE.md` and `SKILLS.md` files, plus tool /
-MCP configuration).
+Durable record of the design intent for the Skillful Claude UI (an Electron
+33 + Vue 3 desktop app for managing global / project `CLAUDE.md` and
+`SKILLS.md` files, plus tool / MCP configuration).
 
 The Pencil source file (`skillful-claude-ui.pen`) is held in memory by the
 Pencil MCP server and may not always be present on disk. This README plus the
