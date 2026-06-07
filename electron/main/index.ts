@@ -4,16 +4,12 @@ import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 import log from "electron-log/main.js";
 
-import { registerIpcHandlers } from "./ipc";
-import { initAutoUpdater } from "./updater";
-
 // ESM doesn't have __dirname. We resolve it from import.meta.url so the
 // preload + renderer paths below work after the bundler emits ESM .mjs.
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // electron-log: routes main-process logs to a rotating file under
-// app.getPath("userData") and to the dev console. The renderer can read
-// these via the standard log file location if needed.
+// app.getPath("userData") and to the dev console.
 log.initialize();
 log.transports.file.level = "info";
 log.transports.console.level = "debug";
@@ -62,14 +58,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  registerIpcHandlers();
+  // IPC handlers and the auto-updater were stripped with the v1 features.
+  // Register new ipcMain.handle(...) channels here as the rebuild adds
+  // them, and expose matching wrappers in electron/preload/index.ts.
   createWindow();
-
-  // Auto-update is a no-op in dev (electron-updater refuses to run from
-  // an unpackaged app). In packaged builds it polls GitHub Releases.
-  if (mainWindow) {
-    initAutoUpdater(mainWindow);
-  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

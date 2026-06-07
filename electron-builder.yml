@@ -10,16 +10,10 @@ files:
   - package.json
   - "!**/*.map"
 
-# `asar: true` packs everything into app.asar EXCEPT the entries listed
-# in `asarUnpack`, which are extracted to app.asar.unpacked. We unpack:
-#   - skills            : the bundled CLI we spawn via child_process —
-#                         must live as real files on disk so Node can
-#                         require/execute it.
-#   - electron-updater  : has native dependencies on some platforms.
+# `asar: true` packs everything into app.asar. Add `asarUnpack` entries
+# here for any package that must live as real files on disk (e.g. a CLI
+# spawned via child_process, or a dep with native binaries).
 asar: true
-asarUnpack:
-  - "node_modules/skills/**/*"
-  - "node_modules/electron-updater/**/*"
 
 directories:
   buildResources: build
@@ -38,13 +32,16 @@ publish:
 
 # ── Per-platform targets ───────────────────────────────────────────────
 
+# Platform icons were stripped with the v1 build assets — electron-builder
+# falls back to the default Electron icon. Drop a real icon set back under
+# build/ and re-add `icon:` keys per platform when branding the new version.
+
 linux:
   target:
     - AppImage
     - deb
     - rpm
   category: Development
-  icon: build/icons
 
 mac:
   target:
@@ -53,7 +50,6 @@ mac:
         - x64
         - arm64
   category: public.app-category.developer-tools
-  icon: build/icon.icns
   hardenedRuntime: true
   gatekeeperAssess: false
 
@@ -62,7 +58,6 @@ win:
     - target: nsis
       arch:
         - x64
-  icon: build/icon.ico
 
 nsis:
   oneClick: false

@@ -1,8 +1,16 @@
 # Skillful Claude
 
-A desktop app for managing `CLAUDE.md` and `SKILL.md` files across your projects and global Claude Code config. Built with Electron 33, Vue 3, and TypeScript. Bundles the `vercel-labs/skills` CLI for skill execution.
+An Electron 33 + Vue 3 + TypeScript desktop app skeleton.
 
-See [`CLAUDE.md`](./CLAUDE.md) for architecture notes and contributor guidance.
+This is the stripped-down skeleton: a working three-process Electron shell
+(main / preload / renderer) with the `electron-vite` build chain, Tailwind v4
+design tokens, and a PrimeVue/Pinia/Vue Router stack installed but unwired.
+The v1 feature code (workspace scanning, config loading, the bundled `skills`
+CLI, auto-update, and the nine UI views) was removed so a new version can be
+built on top. The product direction lives in [`VISION.md`](./VISION.md) and
+[`design/claude-design-brief.md`](./design/claude-design-brief.md).
+
+See [`CLAUDE.md`](./CLAUDE.md) for architecture notes.
 
 ## Commands
 
@@ -18,7 +26,6 @@ npm run build
 npm run typecheck
 
 # Package distributables for the current host into ./dist-builds
-# (uses electron-builder, no publish)
 npm run package
 
 # Per-platform variants
@@ -26,32 +33,26 @@ npm run package:linux    # AppImage, deb, rpm
 npm run package:mac      # dmg (x64 + arm64)
 npm run package:win      # nsis x64
 
-# Build and publish a release to GitHub Releases (drives auto-update)
+# Build and publish a release to GitHub Releases
 npm run release
-
-# Regenerate the icon set from design/icon-source.svg
-npm run icons
-
-# Playwright end-to-end tests (builds with electron-vite first, then
-# drives the main bundle via @playwright/test's _electron helper).
-npm run e2e
-npm run e2e:headed
 ```
 
 `npm run typecheck` runs vue-tsc on `tsconfig.web.json` plus tsc on
-`tsconfig.node.json` and `tsconfig.e2e.json`. That, plus the Playwright
-e2e suite under `e2e/`, are the automated checks — there is no unit-test
-runner or linter wired up.
+`tsconfig.node.json`. There is no unit-test runner, linter, or e2e suite
+wired up — they were stripped with the v1 features.
 
 ## Releasing
 
-Auto-update is wired to GitHub Releases at `rzem-ai/rzem-ai-skillful-claude` via `electron-updater`. To ship a release:
+`electron-builder` publishes to GitHub Releases at
+`rzem-ai/rzem-ai-skillful-claude`. To ship a build:
 
 1. Bump `version` in `package.json`.
-2. Run `npm run release` (which builds, packages, and publishes).
-3. The CI environment must have `GH_TOKEN` set to a token with `repo` scope.
+2. Run `npm run release` (builds, packages, and publishes).
+3. CI must have `GH_TOKEN` set to a token with `repo` scope.
 
-Don't run `npm run release` from a fork — it will publish to the wrong repo.
+In-app auto-update (`electron-updater`) was removed in the strip; re-add it
+when the new version needs it. Don't run `npm run release` from a fork — it
+will publish to the wrong repo.
 
 ## Recommended IDE Setup
 
