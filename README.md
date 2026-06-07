@@ -1,16 +1,21 @@
 # Skillful Claude
 
-An Electron 33 + Vue 3 + TypeScript desktop app skeleton.
+An Electron 33 + Vue 3 + TypeScript desktop app for Claude Code power users:
+a dark-first, dense diagnostic instrument that answers *"what configuration is
+actually in effect, and why?"* across the five config scopes (Managed › CLI ›
+Local › Project › User).
 
-This is the stripped-down skeleton: a working three-process Electron shell
-(main / preload / renderer) with the `electron-vite` build chain, Tailwind v4
-design tokens, and a PrimeVue/Pinia/Vue Router stack installed but unwired.
-The v1 feature code (workspace scanning, config loading, the bundled `skills`
-CLI, auto-update, and the nine UI views) was removed so a new version can be
-built on top. The product direction lives in [`VISION.md`](./VISION.md) and
-[`design/claude-design-brief.md`](./design/claude-design-brief.md).
+This repo currently holds the **front-end build** — all nine screens
+(Dashboard, Scope Stack, Permissions, MCP Map, Memory Map, Extensions, Guided
+Permissions, Raw Editor, plus the launcher) implemented from the design handoff
+in [`design/design_prototype/`](./design/design_prototype) and rendering against
+static fixture data. The three-process Electron shell (`electron-vite` build
+chain) is in place, but no backend is wired yet: the preload bridge is empty and
+the main process registers no IPC handlers. Wiring real filesystem/config reads
+is the next phase.
 
-See [`CLAUDE.md`](./CLAUDE.md) for architecture notes.
+See [`CLAUDE.md`](./CLAUDE.md) for architecture notes and
+[`VISION.md`](./VISION.md) for product direction.
 
 ## Commands
 

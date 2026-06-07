@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Memory Map · Config Studio</title>
+<link rel="stylesheet" href="css/app.css" />
+<style>
+  .mem-grid { display:grid; grid-template-columns: 1fr 380px; gap:18px; align-items:start; }
+  @media (max-width:1180px){ .mem-grid{ grid-template-columns:1fr; } }
+  .mfile { display:grid; grid-template-columns:26px 1fr auto; gap:12px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--border-soft); }
+  .mfile:last-child{ border-bottom:0; }
+  .mfile .ord { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font:11px var(--mono); font-weight:700; background:var(--accent-soft); color:var(--accent); border:1px solid color-mix(in oklab,var(--accent) 30%,transparent); }
+  .mfile.lazy .ord { background:var(--surface-3); color:var(--fg-dim); border-color:var(--border); }
+  .mfile .mp { font:12px var(--mono); color:var(--fg); }
+  .mfile .msub { font-size:11px; color:var(--fg-dim); margin-top:2px; }
+  .graph { font:12px var(--mono); }
+  .gnode { display:flex; align-items:center; gap:8px; padding:6px 0; }
+  .gnode .gline { color:var(--fg-faint); }
+  .gimport { display:flex; align-items:center; gap:8px; padding:5px 0 5px 22px; }
+  .gimport .conn{ color:var(--fg-faint); }
+  .auto-card .ac-row{ display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--border-soft); font-size:12px; }
+  .auto-card .ac-row:last-child{border-bottom:0;}
+  .mempreview { font:11px var(--mono); color:var(--fg-muted); background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius); padding:9px 11px; margin-top:8px; line-height:1.6; }
+</style>
+</head>
+<body data-view="memory">
+<div class="app" id="app">
+  <header class="toolbar" id="tb"></header>
+  <nav class="sidebar" id="sb"></nav>
+  <main class="main" id="main">
+    <section class="view">
+      <div class="view-head">
+        <div class="col">
+          <h1>Memory Map</h1>
+          <span class="sub">Every CLAUDE.md Claude loads for this project, in load order, plus the import graph.</span>
+        </div>
+      </div>
+      <div class="view-body">
+        <div class="banner warn">
+          <span class="b-ico" id="bw"></span>
+          <div><b>1 broken import.</b> <code class="mono-v">CLAUDE.md → docs/style-guide.md</code> points to a file that doesn’t exist.</div>
+          <span class="b-act">Locate in graph</span>
+        </div>
+
+        <div class="mem-grid">
+          <div class="card">
+            <div class="card-h"><h3>Load order</h3><span class="hint" style="margin-left:auto">always-loaded files, top to bottom · then lazy subtrees</span></div>
+            <div id="loadOrder"></div>
+          </div>
+
+          <div class="col" style="gap:18px">
+            <div class="card">
+              <div class="card-h"><h3>Import graph</h3><span class="hint" style="margin-left:auto">@import · flag &gt; 5 hops</span></div>
+              <div class="card-b graph">
+                <div class="gnode"><span>'+'</span><b>CLAUDE.md</b><span class="dim" style="font-family:var(--ui)">project root</span></div>
+                <div class="gimport"><span class="conn">└─ @</span><span>docs/git-workflow.md</span><span class="tag ok">'+'depth 1</span></div>
+                <div class="gimport"><span class="conn">└─ @</span><span style="text-decoration:line-through;color:var(--fg-dim)">docs/style-guide.md</span><span class="tag err">'+'broken link</span></div>
+                <div class="hint" style="margin-top:8px;line-height:1.5">Max import depth reached: <b class="muted">1</b> of 5. No cycles detected.</div>
+              </div>
+            </div>
+
+            <div class="card auto-card">
+              <div class="card-h"><h3>Auto memory</h3><span class="tag ok" style="margin-left:auto">'+'enabled</span></div>
+              <div class="card-b">
+                <div class="ac-row"><span class="dim">Entries</span><span class="mono-v">6</span></div>
+                <div class="ac-row"><span class="dim">Directory</span><span class="mono-v" style="font-size:10.5px">~/.claude/projects/-home-alex-…/memory/</span></div>
+                <div class="ac-row"><span class="dim">Index</span><span class="mono-v">MEMORY.md</span></div>
+                <div class="mempreview">
+                  # Project Memory<br/>
+                  - [Engine purity](engine.md) — no UI imports in engine/<br/>
+                  - [Release flow](release.md) — tag → notes → publish<br/>
+                  <span class="dim">+ 4 more entries…</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/shell.js"></script>
+<script>
+(function(){
+  var svg=Shell.svg, chip=Shell.chip;
+  document.getElementById('bw').innerHTML=svg('alert',16);
+  // fix inline placeholder glyphs
+  var g=document.querySelector('.graph');
+  g.querySelector('.gnode span').innerHTML=svg('file',13);
+  Array.prototype.forEach.call(g.querySelectorAll('.tag.ok'),function(t){ t.innerHTML=svg('check',10)+'depth 1'; });
+  Array.prototype.forEach.call(g.querySelectorAll('.tag.err'),function(t){ t.innerHTML=svg('xcircle',10)+'broken link'; });
+  document.querySelector('.auto-card .tag.ok').innerHTML=svg('check',10)+'enabled';
+
+  var FILES=[
+    {ord:1, scope:'user', path:'~/.claude/CLAUDE.md', sub:'14 lines · personal memory · loads always'},
+    {ord:2, scope:'project', path:'~/Projects/config-studio/CLAUDE.md', sub:'imports 2 files · loads always', committed:true},
+    {ord:3, scope:'local', path:'CLAUDE.local.md', sub:'machine-local notes', gitignore:true},
+    {lazy:true, scope:'project', path:'engine/CLAUDE.md', sub:'loads only when Claude reads files under engine/'}
+  ];
+  document.getElementById('loadOrder').innerHTML=FILES.map(function(f){
+    var badge=''; if(f.committed)badge+='<span class="tag info">committed</span>'; if(f.gitignore)badge+='<span class="tag gitignore">git</span>';
+    var marker = f.lazy ? '<span class="tag inert">'+svg('info',10)+'lazy</span>' : '';
+    return '<div class="mfile'+(f.lazy?' lazy':'')+'"><span class="ord">'+(f.lazy?'∗':f.ord)+'</span>'+
+      '<div><div class="mp">'+f.path+' '+marker+'</div><div class="msub">'+f.sub+'</div></div>'+chip(f.scope)+'</div>';
+  }).join('');
+})();
+</script>
+</body>
+</html>

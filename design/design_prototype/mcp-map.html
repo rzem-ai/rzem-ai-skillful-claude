@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP Servers · Config Studio</title>
+<link rel="stylesheet" href="css/app.css" />
+<style>
+  .mcp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:16px; align-items:start; }
+  .srv { position:relative; }
+  .srv.stacked::before, .srv.stacked::after { content:""; position:absolute; left:6px; right:6px; height:10px; bottom:-5px; background:var(--surface-2); border:1px solid var(--border); border-radius:0 0 var(--radius-lg) var(--radius-lg); z-index:-1; }
+  .srv.stacked::after { bottom:-9px; left:11px; right:11px; opacity:.6; }
+  .srv .card-h { justify-content:space-between; }
+  .srv .sname { font:13px var(--mono); font-weight:600; color:var(--fg); display:flex; align-items:center; gap:8px; }
+  .srv .transport { font:10.5px var(--mono); color:var(--fg-dim); text-transform:uppercase; letter-spacing:.05em; }
+  .srow { display:grid; grid-template-columns:78px 1fr; gap:10px; padding:7px 0; border-bottom:1px solid var(--border-soft); font-size:12px; align-items:start; }
+  .srow:last-child{border-bottom:0;}
+  .srow .sk{ color:var(--fg-dim); } .srow .sv{ font:11.5px var(--mono); color:var(--fg); word-break:break-all; }
+  .envrow { display:flex; align-items:center; gap:8px; font:11.5px var(--mono); padding:3px 0; }
+  .envrow .vname{ color:#c9a0ff; }
+  .shadowed-def { margin:10px 14px 0; padding:9px 11px; border:1px dashed var(--border-strong); border-radius:var(--radius); background:var(--surface-1); opacity:.72; }
+  .shadowed-def .sd-h{ display:flex; align-items:center; gap:8px; font-size:11px; color:var(--fg-dim); margin-bottom:5px; }
+  .collide-note{ display:flex; align-items:center; gap:7px; font-size:11px; color:var(--info); padding:8px 14px; background:var(--info-bg); }
+</style>
+</head>
+<body data-view="mcp">
+<div class="app" id="app">
+  <header class="toolbar" id="tb"></header>
+  <nav class="sidebar" id="sb"></nav>
+  <main class="main" id="main">
+    <section class="view">
+      <div class="view-head">
+        <div class="col">
+          <h1>MCP Server Map</h1>
+          <span class="sub">All servers across scopes. Name collisions resolve Local › Project › User.</span>
+        </div>
+        <div class="spacer"></div>
+        <span class="hint">4 servers · <span style="color:var(--ok)">3 connected</span> · <span style="color:var(--warn)">1 needs a variable</span></span>
+      </div>
+      <div class="view-body">
+        <div class="mcp-grid" id="grid"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/shell.js"></script>
+<script>
+(function(){
+  var svg=Shell.svg, chip=Shell.chip;
+  var SERVERS=[
+    { name:'github', scope:'project', transport:'http', target:'https://api.githubcopilot.com/mcp',
+      status:{cls:'ok',label:'Connected'}, file:'.mcp.json',
+      env:[], collision:'Project beats User — both define “github”. User definition is shadowed.',
+      shadow:{ scope:'user', target:'https://api.githubcopilot.com/mcp', file:'~/.claude.json', note:'Identical URL, lower scope' } },
+    { name:'sentry', scope:'project', transport:'http', target:'https://mcp.sentry.dev/mcp',
+      status:{cls:'warn',label:'Unresolved variable'}, file:'.mcp.json',
+      env:[{name:'SENTRY_AUTH_TOKEN', resolved:false, note:'unset · no default'}] },
+    { name:'docs-search', scope:'project', transport:'http', target:'${DOCS_API_BASE:-…}/mcp',
+      status:{cls:'ok',label:'Connected'}, file:'.mcp.json',
+      env:[{name:'DOCS_API_BASE', resolved:true, note:'default → https://docs.internal.rzem.dev'}] },
+    { name:'scratch-db', scope:'local', transport:'stdio', target:'npx @modelcontextprotocol/server-postgres postgresql://localhost/scratch',
+      status:{cls:'ok',label:'Connected'}, file:'~/.claude.json · projects[config-studio]',
+      env:[] }
+  ];
+
+  document.getElementById('grid').innerHTML=SERVERS.map(function(s){
+    var envHtml = s.env.length ? s.env.map(function(e){
+      return '<div class="envrow">'+svg(e.resolved?'check':'alert', 12)+'<span class="vname">${'+e.name+'}</span>'+
+        '<span class="'+(e.resolved?'tag ok':'tag warn')+'">'+(e.resolved?'resolved':'unresolved')+'</span>'+
+        '<span class="dim" style="font-family:var(--ui)">'+e.note+'</span></div>';
+    }).join('') : '<span class="dim" style="font-size:11px">No variables</span>';
+    var shadow = s.shadow ? '<div class="shadowed-def"><div class="sd-h">'+chip(s.shadow.scope,{ghosted:true})+'shadowed definition</div>'+
+        '<div class="srow" style="border:0;padding:0"><span class="sk">target</span><span class="sv" style="text-decoration:line-through;color:var(--fg-dim)">'+s.shadow.target+'</span></div>'+
+        '<div class="hint" style="margin-top:3px">'+s.shadow.file+' — '+s.shadow.note+'</div></div>' : '';
+    var collide = s.collision ? '<div class="collide-note">'+svg('layers',13)+s.collision+'</div>' : '';
+    return '<div class="card srv'+(s.shadow?' stacked':'')+'">'+
+      '<div class="card-h"><span class="sname">'+svg('db',14)+s.name+'</span>'+
+        '<span class="health '+s.status.cls+'"><span class="dot"></span>'+s.status.label+'</span></div>'+
+      '<div class="card-b" style="padding-bottom:6px">'+
+        '<div class="srow"><span class="sk">Transport</span><span class="sv"><span class="transport">'+s.transport+'</span></span></div>'+
+        '<div class="srow"><span class="sk">Target</span><span class="sv">'+s.target+'</span></div>'+
+        '<div class="srow"><span class="sk">Source</span><span class="sv">'+chip(s.scope)+' &nbsp;'+s.file+'</span></div>'+
+        '<div class="srow"><span class="sk">Variables</span><span class="sv">'+envHtml+'</span></div>'+
+      '</div>'+ collide + shadow +
+      '<div style="padding:9px 14px;border-top:1px solid var(--border-soft);display:flex;gap:8px">'+
+        '<button class="btn sm" data-test="'+s.name+'">'+svg('play',12)+'Test connection</button>'+
+        '<a class="btn ghost sm" href="raw-editor.html">'+svg('code',12)+'Open source</a></div>'+
+    '</div>';
+  }).join('');
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-test]'),function(b){
+    b.addEventListener('click',function(){
+      var n=b.dataset.test;
+      if(n==='sentry') Shell.toast('sentry: cannot connect — ${SENTRY_AUTH_TOKEN} is unset','alert');
+      else Shell.toast(n+': connection OK','check');
+    });
+  });
+})();
+</script>
+</body>
+</html>

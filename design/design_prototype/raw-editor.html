@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Raw Editor · Config Studio</title>
+<link rel="stylesheet" href="css/app.css" />
+<style>
+  .raw { display:grid; grid-template-columns: 256px 1fr; height:100%; }
+  .ftree { border-right:1px solid var(--border); background:var(--surface-1); overflow:auto; padding:8px 0; }
+  .ftg { padding:8px 0 2px; }
+  .ftg .h { display:flex; align-items:center; gap:7px; padding:5px 12px; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--fg-dim); font-weight:650; }
+  .fitem { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:8px; padding:5px 12px 5px 22px; cursor:pointer; font:12px var(--mono); color:var(--fg-muted); }
+  .fitem:hover{ background:var(--surface-2); color:var(--fg); }
+  .fitem.on{ background:var(--accent-soft); color:var(--fg); box-shadow:inset 2px 0 0 var(--accent); }
+  .fitem .fdot{ display:flex; }
+  .fitem .fb{ display:flex; gap:4px; }
+  .editor-wrap { display:flex; flex-direction:column; overflow:hidden; }
+  .etabs { display:flex; align-items:center; gap:2px; padding:0 8px; height:38px; border-bottom:1px solid var(--border); background:var(--surface-2); }
+  .etab { display:flex; align-items:center; gap:7px; height:38px; padding:0 12px; font:12px var(--mono); color:var(--fg-muted); border-bottom:2px solid transparent; cursor:pointer; }
+  .etab.on{ color:var(--fg); border-bottom-color:var(--accent); }
+  .etools{ margin-left:auto; display:flex; gap:6px; }
+  .panes { flex:1; display:grid; grid-template-columns:1fr; overflow:hidden; }
+  .panes.split { grid-template-columns:1fr 1fr; }
+  .pane { display:flex; flex-direction:column; overflow:hidden; border-right:1px solid var(--border); }
+  .pane:last-child{ border-right:0; }
+  .pane-h { display:flex; align-items:center; gap:8px; padding:7px 12px; border-bottom:1px solid var(--border-soft); background:var(--surface-1); font:11px var(--mono); color:var(--fg-muted); }
+  .pane-h .ph-path{ color:var(--fg); }
+  .code { flex:1; overflow:auto; font:12px/1.6 var(--mono); padding:8px 0; background:var(--surface-1); }
+  .cl { display:grid; grid-template-columns: 20px 40px 1fr; align-items:start; }
+  .cl .g { color:var(--err); display:flex; justify-content:center; padding-top:3px; }
+  .cl .g.warn{ color:var(--warn); }
+  .cl .n { text-align:right; padding-right:12px; color:var(--fg-faint); user-select:none; }
+  .cl .t { white-space:pre; padding-right:14px; }
+  .cl.hi { background:var(--accent-soft); box-shadow:inset 2px 0 0 var(--accent); }
+  .cl.errln { background:var(--err-bg); }
+  .cl.warnln { background:var(--warn-bg); }
+  .cl .t .key{ color:#8fd0ff; } .cl .t .str{ color:#9cdca0; } .cl .t .num{ color:#e6b673; } .cl .t .bool{ color:#c9a0ff; } .cl .t .pun{ color:var(--fg-dim); }
+  .lint-line { grid-column:1/-1; display:flex; align-items:center; gap:7px; padding:5px 14px 5px 60px; font-size:11px; }
+  .lint-line.err{ color:var(--err); background:var(--err-bg); } .lint-line.warn{ color:var(--warn); background:var(--warn-bg); }
+  .lint-line .la{ margin-left:auto; color:var(--accent); cursor:pointer; font-weight:600; }
+  .savebar { display:flex; align-items:center; gap:12px; padding:9px 14px; border-top:1px solid var(--border); background:var(--surface-2); }
+  .savebar .vstat{ display:flex; align-items:center; gap:7px; font-size:12px; }
+  .folded { padding:6px 14px 6px 60px; color:var(--fg-dim); font-size:11px; display:flex; align-items:center; gap:8px; }
+  .folded .unlock{ color:var(--accent); cursor:pointer; }
+</style>
+</head>
+<body data-view="raw">
+<div class="app" id="app">
+  <header class="toolbar" id="tb"></header>
+  <nav class="sidebar" id="sb"></nav>
+  <main class="main" id="main">
+    <section class="view view-body flush" style="overflow:hidden">
+      <div class="raw">
+        <!-- file tree -->
+        <aside class="ftree" id="ftree"></aside>
+        <!-- editor -->
+        <div class="editor-wrap">
+          <div class="etabs">
+            <div class="etab on" id="tabFile"></div>
+            <div class="etools">
+              <button class="btn ghost sm" id="splitBtn"></button>
+            </div>
+          </div>
+          <div class="panes" id="panes"></div>
+          <div class="savebar" id="savebar"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- diff modal -->
+<div class="scrim" id="scrim" hidden>
+  <div class="modal">
+    <div class="modal-h"><span style="color:var(--accent)" id="diffIco"></span><h2>Delete project <code class="mono-v" style="font-size:13px">defaultMode</code></h2>
+      <div style="flex:1"></div><button class="icon-btn" id="diffClose"></button></div>
+    <div class="modal-b" id="diffBody"></div>
+    <div class="modal-f"><span class="hint">Atomic write · timestamped backup created</span><div style="flex:1"></div>
+      <button class="btn" id="diffCancel">Cancel</button><button class="btn primary" id="diffConfirm">Apply &amp; back up</button></div>
+  </div>
+</div>
+
+<script src="js/shell.js"></script>
+<script>
+(function(){
+  var svg=Shell.svg, chip=Shell.chip;
+  document.getElementById('diffIco').innerHTML=svg('diff',16);
+  document.getElementById('diffClose').innerHTML=svg('xcircle',16);
+
+  // ---- JSON colorizer (line-level) ----
+  function color(t){
+    return t
+      .replace(/("(?:[^"\\]|\\.)*")(\s*:)/g,'<span class="key">$1</span><span class="pun">$2</span>')
+      .replace(/:\s*("(?:[^"\\]|\\.)*")/g, function(m,p1){ return ': <span class="str">'+p1+'</span>'; })
+      .replace(/:\s*(true|false|null)/g, ': <span class="bool">$1</span>')
+      .replace(/:\s*(-?\d+\.?\d*)/g, ': <span class="num">$1</span>')
+      .replace(/([{}\[\],])/g,'<span class="pun">$1</span>');
+  }
+
+  // line: {t, n?, g?:'err'|'warn', hi?, cls?, lint?:{type,msg,action}, folded?}
+  function L(t,opts){ opts=opts||{}; opts.t=t; return opts; }
+
+  // ---- files ----
+  var FILES={
+    'proj': { scope:'project', path:'.claude/settings.json', label:'settings.json', health:'warn', committed:true,
+      lines:[
+        L('{'), L('  "$schema": "…/claude-code-settings.json",'),
+        L('  "model": "claude-sonnet-4-6",'),
+        L('  "permissions": {'),
+        L('    "defaultMode": "acceptEdits",', {hi:true, key:'defaultMode'}),
+        L('    "allow": ["Bash(npm run *)", "Bash(curl localhost*)"],', {g:'warn', lint:{type:'warn',msg:'Bash(curl localhost*) is unreachable — always matched first by managed deny Bash(curl *).',action:'Explain'}}),
+        L('    "ask": ["Bash(git push *)"],'),
+        L('    "deny": ["Read(./.env)", "Read(./.env.*)"],'),
+        L('    "additionalDirectories": ["../config-studio-docs/"]'),
+        L('  },'),
+        L('  "enabledPlugins": { "formatter@team-tools": true },'),
+        L('  "extraKnownMarketplaces": { "team-tools": { "source": {…} } }'),
+        L('}')
+      ]},
+    'local': { scope:'local', path:'.claude/settings.local.json', label:'settings.local.json', health:'ok', gitignore:true,
+      lines:[
+        L('{'), L('  "permissions": {'),
+        L('    "defaultMode": "auto"', {hi:true, key:'defaultMode', g:'warn', lint:{type:'warn',msg:'Ignored — “auto” mode can only be set in user settings (since v2.1.142).',action:'Move to user'}}),
+        L('  },'),
+        L('  "outputStyle": "Explanatory",'),
+        L('  "enabledPlugins": { "formatter@team-tools": false }'),
+        L('}')
+      ]},
+    'user': { scope:'user', path:'~/.claude/settings.json', label:'settings.json', health:'warn',
+      lines:[
+        L('{'), L('  "model": "claude-opus-4-7",'),
+        L('  "effortLevel": "high",'),
+        L('  "alwaysThinkingEnabled": true,'),
+        L('  "editorMode": "vim",'),
+        L('  "autoConnectIde": true,', {g:'warn', lint:{type:'warn',msg:'Wrong file — autoConnectIde belongs in ~/.claude.json or it is ignored.',action:'Move it'}}),
+        L('  "permissions": { "defaultMode": "plan", "allow": ["Bash(git diff *)","Bash(git log *)"], "deny": ["Read(~/.ssh/**)"] },', {key:'defaultMode'}),
+        L('  "env": {'),
+        L('    "NODE_ENV": "development",'),
+        L('    "NPM_TOKEN": "npm_••••••••••••"  // masked', {g:'warn', lint:{type:'warn',msg:'Secret detected — masked by default. Reveal per-field; never written to diffs.',action:'Reveal'}}),
+        L('  }'),
+        L('}')
+      ]},
+    'mgmt': { scope:'managed', path:'/etc/claude-code/managed-settings.json', label:'managed-settings.json', health:'ok', locked:true,
+      lines:[
+        L('{'), L('  "permissions": { "deny": ["Bash(curl *)", "Read(//etc/secrets/**)"] },'),
+        L('  "disableBypassPermissionsMode": "disable",'),
+        L('  "forceLoginMethod": "claudeai",'),
+        L('  "sandbox": { "network": { "deniedDomains": ["uploads.github.com"] } }'),
+        L('}')
+      ]},
+    'mgmt2': { scope:'managed', path:'managed-settings.d/20-experimental.json', label:'20-experimental.json', health:'err', locked:true,
+      parseErr:{line:4, msg:'Unexpected token } — trailing comma after "autoUpdatesChannel" (line 4). File excluded from resolution.'},
+      lines:[
+        L('{'), L('  "spinnerTipsEnabled": false,'),
+        L('  "autoUpdatesChannel": "stable",', {g:'err'}),
+        L('}', {g:'err', lint:{type:'err',msg:'Trailing comma — invalid JSON. This whole file is excluded until fixed.',action:'Open docs'}})
+      ]},
+    'global': { scope:'user', path:'~/.claude.json', label:'.claude.json', health:'ok', dragons:true,
+      lines:[
+        L('{'),
+        L('  "oauthAccount": { … },', {folded:true}),
+        L('  "mcpServers": {'),
+        L('    "github": { "type": "http", "url": "https://api.githubcopilot.com/mcp",'),
+        L('               "headers": { "Authorization": "Bearer ${GITHUB_PAT}" } }'),
+        L('  },'),
+        L('  "projects": { "/home/alex/Projects/config-studio": { "hasTrustDialogAccepted": true, … } }')
+      ]}
+  };
+  var TREE=[
+    {scope:'managed', ids:['mgmt','mgmt2']},
+    {scope:'local', ids:['local']},
+    {scope:'project', ids:['proj']},
+    {scope:'user', ids:['user','global']}
+  ];
+
+  function fhealthDot(h){ var cls=h==='ok'?'ok':h==='warn'?'warn':h==='err'?'err':'miss'; return '<span class="health '+cls+'"><span class="dot"></span></span>'; }
+
+  function renderTree(active){
+    document.getElementById('ftree').innerHTML=TREE.map(function(g){
+      return '<div class="ftg"><div class="h">'+chip(g.scope)+'</div>'+ g.ids.map(function(id){
+        var f=FILES[id];
+        var b=''; if(f.locked)b+='<span class="tag lock" title="read-only">'+svg('lock',10)+'</span>'; if(f.gitignore)b+='<span class="tag gitignore">git</span>';
+        return '<div class="fitem'+(id===active?' on':'')+'" data-id="'+id+'"><span class="fdot">'+fhealthDot(f.health)+'</span><span>'+f.label+'</span><span class="fb">'+b+'</span></div>';
+      }).join('')+'</div>';
+    }).join('');
+    Array.prototype.forEach.call(document.querySelectorAll('.fitem'),function(el){
+      el.addEventListener('click',function(){ openFile(el.dataset.id); });
+    });
+  }
+
+  function renderCode(f, opts){
+    opts=opts||{};
+    var n=0, html='';
+    f.lines.forEach(function(ln){
+      n++;
+      if (ln.folded){ html+='<div class="folded">'+svg('lock',12)+'<span>'+ln.t.trim()+'</span><span class="unlock">here be dragons — unlock</span></div>'; return; }
+      var gut = ln.g ? '<span class="g '+(ln.g==='warn'?'warn':'')+'" title="lint">'+svg(ln.g==='err'?'xcircle':'alert',13)+'</span>' : '<span class="g"></span>';
+      var cls='cl'; if(ln.g==='err')cls+=' errln'; else if(ln.g==='warn')cls+=' warnln';
+      if(opts.hiKey && ln.key===opts.hiKey) cls+=' hi'; else if(ln.hi && !opts.hiKey) cls+=' hi';
+      html+='<div class="'+cls+'">'+gut+'<span class="n">'+n+'</span><span class="t">'+color(ln.t)+'</span></div>';
+      if (ln.lint){ html+='<div class="lint-line '+ln.lint.type+'">'+svg(ln.lint.type==='err'?'xcircle':'alert',12)+'<span>'+ln.lint.msg+'</span><span class="la">'+ln.lint.action+'</span></div>'; }
+    });
+    return html;
+  }
+
+  var curId='proj', split=false, splitKey='defaultMode';
+
+  function openFile(id){
+    curId=id; split=false; renderTree(id); renderEditor();
+  }
+
+  function renderEditor(){
+    var panes=document.getElementById('panes');
+    var splitBtn=document.getElementById('splitBtn');
+    splitBtn.innerHTML = svg('compare',13)+(split?'Exit side-by-side':'Side-by-side resolution');
+    splitBtn.classList.toggle('primary', false);
+    document.getElementById('tabFile').innerHTML = svg('file',13)+(split?'defaultMode · 2 sources':FILES[curId].label);
+
+    if (split){
+      panes.className='panes split';
+      var left=FILES['proj'], right=FILES['local'];
+      panes.innerHTML =
+        pane(left, splitKey, 'winner') + pane(right, splitKey, 'ignored');
+      renderSaveBar(true);
+    } else {
+      panes.className='panes';
+      var f=FILES[curId];
+      var banner = f.parseErr ? '<div class="banner err" style="margin:10px 12px 0"><span class="b-ico">'+svg('xcircle',16)+'</span><div><b>Parse error · line '+f.parseErr.line+'.</b> '+f.parseErr.msg+'</div></div>' : '';
+      panes.innerHTML='<div class="pane"><div class="pane-h">'+chip(f.scope)+'<span class="ph-path">'+f.path+'</span>'+
+        (f.locked?'<span class="tag lock" style="margin-left:auto">'+svg('lock',10)+'read-only</span>':'')+'</div>'+
+        banner+'<div class="code">'+renderCode(f)+'</div></div>';
+      renderSaveBar(false);
+    }
+    wirePane();
+  }
+
+  function pane(f, key, role){
+    var roleTag = role==='winner' ? '<span class="tag info" style="margin-left:auto">'+svg('check',10)+'winner</span>'
+                                  : '<span class="tag warn" style="margin-left:auto">'+svg('alert',10)+'ignored</span>';
+    var del = role==='winner' ? '<div style="padding:8px 12px;border-top:1px solid var(--border-soft)"><button class="btn danger sm" id="delEntry">'+svg('trash',12)+'Delete this defaultMode entry</button></div>' : '';
+    return '<div class="pane"><div class="pane-h">'+chip(f.scope)+'<span class="ph-path">'+f.path+'</span>'+roleTag+'</div>'+
+      '<div class="code">'+renderCode(f,{hiKey:key})+'</div>'+del+'</div>';
+  }
+
+  function renderSaveBar(isSplit){
+    var f=FILES[curId];
+    var sb=document.getElementById('savebar');
+    if (isSplit){
+      sb.innerHTML='<div class="vstat health warn"><span class="dot"></span>Resolution view — Project wins, Local ignored by rule</div>'+
+        '<div style="flex:1"></div><span class="hint">Edit a side to write directly to that file</span>';
+      return;
+    }
+    if (f.locked){ sb.innerHTML='<div class="vstat"><span class="tag lock">'+svg('lock',11)+'Managed</span><span class="muted">Read-only — managed files are observed, never written.</span></div>'; return; }
+    var ok = f.health!=='err';
+    sb.innerHTML='<div class="vstat health '+(ok?'warn':'err')+'"><span class="dot"></span>'+(ok?(f.health==='warn'?'Valid JSON · 1 semantic warning':'Valid JSON'):'Invalid JSON — cannot save')+'</div>'+
+      '<span class="hint">'+(f.gitignore?'gitignored · ':'')+(f.committed?'committed · ':'')+'last saved Jun 6</span>'+
+      '<div style="flex:1"></div>'+
+      '<button class="btn sm" id="revertBtn">Revert</button>'+
+      '<button class="btn primary sm" id="saveBtn"'+(ok?'':' disabled')+'>'+svg('check',12)+'Validate &amp; save</button>';
+    var s=document.getElementById('saveBtn'); if(s) s.addEventListener('click',function(){ Shell.toast('Saved '+f.label+' · backup created','check','Undo',function(){Shell.toast('Restored from backup','check');}); });
+    var r=document.getElementById('revertBtn'); if(r) r.addEventListener('click',function(){ Shell.toast('Reverted unsaved changes','check'); });
+  }
+
+  function wirePane(){
+    var del=document.getElementById('delEntry');
+    if (del) del.addEventListener('click', openDiff);
+    Array.prototype.forEach.call(document.querySelectorAll('.lint-line .la'),function(a){
+      a.addEventListener('click',function(){ Shell.toast('“'+a.textContent+'” — '+'guided fix opens','sliders'); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.folded .unlock'),function(u){
+      u.addEventListener('click',function(){ Shell.toast('Sensitive section unlocked for this session','alert'); });
+    });
+  }
+
+  document.getElementById('splitBtn').addEventListener('click',function(){ split=!split; if(split){curId='proj';renderTree('proj');} renderEditor(); });
+
+  // ---- diff modal (hero step 4) ----
+  function openDiff(){
+    document.getElementById('diffBody').innerHTML=
+      '<div class="diff-block"><div class="diff-h">'+svg('file',13)+'File diff · .claude/settings.json</div>'+
+        '<div class="diff"><div class="ln"><span class="gut">…</span><span class="txt">  "permissions": {</span></div>'+
+        '<div class="ln del"><span class="gut">-</span><span class="txt">    "defaultMode": "acceptEdits",</span></div>'+
+        '<div class="ln"><span class="gut">…</span><span class="txt">  }</span></div></div></div>'+
+      '<div class="diff-block thesis"><div class="diff-h">'+svg('arrow',13)+'What actually changes · effective configuration</div>'+
+        '<div class="diff thesis">'+
+          '<div class="ln del"><span class="gut">-</span><span class="txt">defaultMode = acceptEdits   (was: Project)</span></div>'+
+          '<div class="ln add"><span class="gut">+</span><span class="txt">defaultMode = plan          (now: User)</span></div>'+
+        '</div>'+
+        '<div class="hint" style="margin-top:7px">'+svg('info',12)+' With the Project entry gone, the User value <code>plan</code> becomes effective. (Local <code>auto</code> stays ignored.)</div></div>';
+    document.getElementById('scrim').hidden=false;
+  }
+  document.getElementById('diffClose').addEventListener('click',function(){document.getElementById('scrim').hidden=true;});
+  document.getElementById('diffCancel').addEventListener('click',function(){document.getElementById('scrim').hidden=true;});
+  document.getElementById('diffConfirm').addEventListener('click',function(){
+    document.getElementById('scrim').hidden=true;
+    // mutate fixture: remove project defaultMode line
+    FILES['proj'].lines = FILES['proj'].lines.filter(function(l){ return l.key!=='defaultMode'; });
+    renderEditor();
+    Shell.toast('Project defaultMode removed · now resolves to User “plan” · backup created','check','Undo',function(){ location.reload(); });
+  });
+
+  // ---- boot: honour ?key=defaultMode → open split ----
+  renderTree('proj');
+  var params=new URLSearchParams(location.search);
+  if (params.get('key')==='defaultMode'){ split=true; }
+  renderEditor();
+})();
+</script>
+</body>
+</html>

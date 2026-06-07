@@ -4,80 +4,89 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-This is the **stripped skeleton** of Skillful Claude — an Electron 33 + Vue 3
-desktop app. The v1 implementation (managing `CLAUDE.md` / `SKILL.md` files,
-a Vue Flow dashboard, the bundled `vercel-labs/skills` CLI, auto-update, and
-nine UI views) was removed so a new version can be built on the bones. The
-intended product direction lives in `VISION.md` and
-`design/claude-design-brief.md`.
+**Skillful Claude** is an Electron 33 + Vue 3 desktop app for Claude Code power
+users. It answers one question — *"what configuration is actually in effect, and
+why?"* — across the five config scopes (Managed › CLI › Local › Project › User)
+and offers guided forms plus a raw editor to change it. Dark-first, dense,
+developer-tool aesthetic (Linear/Tower/TablePlus, not a SaaS dashboard).
 
-What remains is a launchable three-process Electron shell and its build chain.
-Nothing feature-specific is wired up. See `README.md` for build/run commands.
-The only automated check is `npm run typecheck` (vue-tsc on the renderer plus
-tsc on the main/preload TS project) — there is no test runner, linter, or e2e
-suite.
+The current codebase is the **front-end build** of that product, implemented
+from the design handoff in `design/design_prototype/` (its `DESIGN-HANDOFF.md`
+is the visual contract). All nine screens render against **static fixture
+data** — there is no backend wired up yet: the preload bridge exposes an empty
+`api` and the main process registers no IPC handlers. Wiring real
+filesystem/config reads is the next phase.
+
+See `README.md` for build/run commands. The only automated check is
+`npm run typecheck` (vue-tsc on the renderer + tsc on the main/preload project).
+There is no test runner, linter, or e2e suite.
 
 ## Architecture
 
 ### Three processes, one IPC seam
 
-`electron-vite` builds three separate bundles, one per process:
+`electron-vite` builds three bundles, one per process:
 
-- **Main (`electron/main/`)** — Node.js. Owns the BrowserWindow. Entry:
-  `electron/main/index.ts`. Currently just creates the window and loads the
-  renderer; `electron-log` is wired for main-process logging. Register new
-  `ipcMain.handle(...)` channels here.
-- **Preload (`electron/preload/`)** — sandboxed bridge. `index.ts` calls
-  `contextBridge.exposeInMainWorld("api", api)` with an **empty** `api` object
-  — the template to grow. Renderer-side type declarations live in `api.d.ts`.
-- **Renderer (`src/`)** — the Vue 3 app. Stripped to `main.ts` (mounts
-  `App.vue`) and `App.vue` (renders "Hello"). Pinia, Vue Router, PrimeVue and
-  the Iconify Lucide set are installed but intentionally **not** wired into
-  `main.ts` — add them back as the rebuild needs them.
+- **Main (`electron/main/index.ts`)** — Node.js. Creates the BrowserWindow,
+  loads the renderer, wires `electron-log`. No IPC handlers yet — register new
+  `ipcMain.handle(...)` channels here when adding backend capability.
+- **Preload (`electron/preload/index.ts`)** — sandboxed `contextBridge` exposing
+  `window.api`. Currently an **empty** `api = {}`; grow it (and `api.d.ts`) in
+  lockstep with the main process. The bridge is the only seam through which
+  renderer code can reach Node.
+- **Renderer (`src/`)** — the Vue 3 app (see below).
 
-The IPC surface convention is `<namespace>:<verb>` (e.g. `fs:scanWorkspace`).
-**When adding a command, update all three layers**: the main-side handler
-(`electron/main/`), the preload bridge (`electron/preload/index.ts` +
-`api.d.ts`), and the renderer. They're coupled by design — the bridge is the
-only seam through which renderer code can reach Node.
+When adding a backend command, update all three layers together.
 
-### Build layout (`electron.vite.config.ts`)
+### Renderer structure (`src/`)
 
-- `electron/main` → main process (Node)
-- `electron/preload` → preload (Node, sandboxed bridge)
-- `src/` → renderer (Vue), root `.`, `@` aliased to `./src`, dev server on
-  port 1420
+- **`styles/app.css`** — the complete design system, the source of truth for
+  visual style. Defines all tokens as CSS custom properties: neutral surfaces
+  (`--bg`, `--surface-1..4`), text (`--fg`, `--fg-muted`, `--fg-dim`), the app
+  accent (`--accent`, teal — chrome only), the five reserved **scope colors**
+  (`--scope-managed|cli|local|project|user`), semantic state colors, type scale
+  (`--t-cap|body|sec|view`), geometry, and layout dims. Light theme overrides
+  live under `:root[data-theme="light"]`. **Style new components with these
+  tokens and the existing classes — not hex literals, Tailwind, or PrimeVue.**
+- **`lib/icons.ts`** — the inline-SVG path set; **`components/Icon.vue`** renders
+  `<Icon name="grid" :size="16" />`.
+- **`lib/scopes.ts`** + **`components/ProvenanceChip.vue`** — the signature
+  component: scope color + icon + label, with an optional hover card.
+- **`composables/useTheme.ts`** — `data-theme` on `<html>`, persisted to
+  localStorage (`sc:theme`); `initTheme()` runs once at boot in `main.ts`.
+- **`composables/useToast.ts`** + **`components/ToastHost.vue`** — global toast
+  queue rendered once in `App.vue`.
+- **`components/AppToolbar.vue`**, **`AppSidebar.vue`**, **`layouts/AppShell.vue`**
+  — the shell chrome. `AppShell` is the `.app` CSS grid; it expects exactly
+  three children (`.toolbar`, `.sidebar`, and the view's `.main`), so **every
+  shell view's root element must be `<main class="main">`** (toggle
+  `:class="{ 'show-inspector': open }"` when the view has an inspector aside).
+- **`views/`** — one component per screen: `OverviewView` (launcher, no shell),
+  `DashboardView`, `ScopeStackView`, `PermissionsView`, `McpMapView`,
+  `MemoryMapView`, `ExtensionsView`, `GuidedPermissionsView`, `RawEditorView`.
+  Each holds its own typed fixture data and screen-local `<style scoped>`.
 
-`externalizeDepsPlugin()` keeps Node deps out of the main/preload bundles so
-they resolve from `node_modules` at runtime.
+### Routing (`src/router/index.ts`)
 
-### Design tokens
-
-Tailwind v4 reads color tokens (`--color-page`, `--color-strong`,
-`--color-line`, etc.) from `@theme` in `src/styles/main.css`, so utilities
-like `bg-page`, `text-strong`, `border-line` work without a
-`tailwind.config.js`. Keep new components on these tokens rather than hex
-literals so theming stays consistent. The palette is carried over from the
-design brief.
+Hash history (`createWebHashHistory`) — packaged Electron loads the renderer
+over `file://`, where HTML5 history breaks. `OverviewView` sits at `/` outside
+the shell. Every other screen renders inside `AppShell` via a **layout route**:
+a parent with a non-colliding path (`/_shell`) whose children use absolute
+paths (`/dashboard`, `/permissions`, …). Each child sets `meta.navId`, which
+`AppSidebar` reads to highlight the active item.
 
 ## Things to know
 
-- **ESM all the way**: `package.json` has `"type": "module"`. The main process
-  is ESM, so `__dirname` doesn't exist — derive it via
-  `dirname(fileURLToPath(import.meta.url))` (already done in
-  `electron/main/index.ts`).
-- **Sandbox is off**: ESM preloads require `sandbox: false` on the
-  BrowserWindow. The renderer is still walled off via `contextIsolation: true`
-  + `nodeIntegration: false` — the only way to reach Node is the preload bridge.
-- **`asarUnpack` matters**: if you re-add a CLI that gets spawned via
-  `child_process`, or a dep with native binaries, list it under `asarUnpack`
-  in `electron-builder.yml` or it can't be executed inside a packaged app.
+- **ESM all the way**: `package.json` has `"type": "module"`. Derive `__dirname`
+  via `dirname(fileURLToPath(import.meta.url))` in the main process.
+- **Sandbox is off**: ESM preloads require `sandbox: false`; the renderer is
+  still walled off via `contextIsolation: true` + `nodeIntegration: false`.
+- **Tailwind & PrimeVue are installed but unused** by these screens — the
+  prototype ships its own design system in `app.css`. Don't reach for them when
+  building Config screens; stay on the `app.css` tokens/classes.
+- **Fixtures, not real data**: every value on screen is a typed `const` inside
+  its view. When the backend lands, replace the fixtures with IPC calls — keep
+  the same shapes so the templates don't change.
 - **Updater publish target is real**: `electron-builder.yml` points at
-  `rzem-ai/rzem-ai-skillful-claude` on GitHub. Don't run `npm run release`
-  from a fork or you'll publish to the wrong repo. In-app auto-update
-  (`electron-updater`) was removed in the strip — re-add it if needed.
-- **Icons were stripped**: `build/` icon assets are gone, so packaging falls
-  back to the default Electron icon. Drop a real icon set back under `build/`
-  and re-add the `icon:` keys in `electron-builder.yml` when branding.
-- Per-user Claude Code settings live in `.claude/` and are gitignored — don't
-  commit anything there.
+  `rzem-ai/rzem-ai-skillful-claude`. Don't run `npm run release` from a fork.
+- Per-user Claude Code settings live in `.claude/` and are gitignored.

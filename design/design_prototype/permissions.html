@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Permissions · Config Studio</title>
+<link rel="stylesheet" href="css/app.css" />
+<style>
+  .perm-grid { display:grid; grid-template-columns: 1fr 360px; gap:18px; align-items:start; }
+  @media (max-width:1180px){ .perm-grid{ grid-template-columns:1fr; } }
+  .tester .card-b { display:flex; flex-direction:column; gap:12px; }
+  .tester-input { display:flex; gap:8px; }
+  .tester-input input { flex:1; }
+  .examples { display:flex; flex-wrap:wrap; gap:6px; }
+  .ex { font:11px var(--mono); padding:3px 8px; border:1px solid var(--border); border-radius:5px; color:var(--fg-muted); cursor:pointer; background:var(--surface-1); }
+  .ex:hover { border-color:var(--border-strong); color:var(--fg); }
+  .outcome { border-radius:var(--radius); padding:13px; border:1px solid transparent; }
+  .outcome .ob-top { display:flex; align-items:center; gap:9px; font-weight:700; font-size:15px; }
+  .outcome .ob-sub { font:12px var(--mono); margin-top:7px; color:var(--fg); line-height:1.5; }
+  .outcome.denied { background:var(--err-bg); border-color:color-mix(in oklab,var(--err) 32%,transparent); } .outcome.denied .ob-top{color:var(--err);}
+  .outcome.ask { background:var(--warn-bg); border-color:color-mix(in oklab,var(--warn) 32%,transparent); } .outcome.ask .ob-top{color:var(--warn);}
+  .outcome.allowed { background:var(--ok-bg); border-color:color-mix(in oklab,var(--ok) 32%,transparent); } .outcome.allowed .ob-top{color:var(--ok);}
+  .outcome.fall { background:var(--surface-3); border-color:var(--border); } .outcome.fall .ob-top{color:var(--fg-muted);}
+  .rule.hit { background:var(--accent-soft) !important; box-shadow: inset 2px 0 0 var(--accent); }
+  .rule .src { display:flex; }
+  .sandbox-row { display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--border-soft); font-size:12px; }
+  .sandbox-row:last-child{border-bottom:0;}
+  .sandbox-row .sb-k { color:var(--fg-dim); width:120px; flex:none; }
+  .sandbox-row code { color:var(--fg); }
+</style>
+</head>
+<body data-view="permissions">
+<div class="app" id="app">
+  <header class="toolbar" id="tb"></header>
+  <nav class="sidebar" id="sb"></nav>
+  <main class="main" id="main">
+    <section class="view">
+      <div class="view-head">
+        <div class="col">
+          <h1>Permissions Inspector</h1>
+          <span class="sub">All rules merged across scopes, in real evaluation order. First match wins.</span>
+        </div>
+        <div class="spacer"></div>
+        <a class="btn sm" href="guided-permissions.html">Edit rules '+'</a>
+      </div>
+      <div class="view-body">
+        <div class="banner warn">
+          <span class="b-ico">'+ </span>
+          <div><b>1 unreachable rule.</b> A project-scope <code class="mono-v">allow</code> is permanently shadowed by a managed <code class="mono-v">deny</code>. See rule #10.</div>
+        </div>
+        <div class="perm-grid">
+          <div>
+            <div class="card" style="overflow:hidden" id="ruleList"></div>
+
+            <div class="card mt">
+              <div class="card-h"><h3>Effective sandbox</h3><span class="hint" style="margin-left:auto">merged from permission rules + sandbox config</span></div>
+              <div class="card-b">
+                <div class="sandbox-row"><span class="sb-k">Filesystem deny</span><div><code>~/.ssh/**</code> · <code>./.env</code> · <code>./.env.*</code> · <code>//etc/secrets/**</code></div></div>
+                <div class="sandbox-row"><span class="sb-k">Extra directories</span><div><code>../config-studio-docs/</code> <span class="tag info" style="margin-left:6px">Project</span></div></div>
+                <div class="sandbox-row"><span class="sb-k">Network deny</span><div><code>uploads.github.com</code> <span class="tag lock" style="margin-left:6px">Managed</span></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tester">
+            <div class="card">
+              <div class="card-h"><h3>Rule tester</h3></div>
+              <div class="card-b">
+                <p class="hint" style="margin:-2px 0 2px">Type a hypothetical tool call to see which rule matches first.</p>
+                <div class="tester-input">
+                  <input class="field field-mono" id="testIn" placeholder="Bash(git push origin main)" />
+                  <button class="btn primary" id="testRun">Test</button>
+                </div>
+                <div class="examples" id="examples"></div>
+                <div id="outcome"></div>
+              </div>
+            </div>
+            <div class="hint mt" style="line-height:1.6">
+              <b class="muted">Evaluation order</b><br/>
+              <span style="color:var(--deny)">deny</span> → <span style="color:var(--ask)">ask</span> → <span style="color:var(--allow)">allow</span>, first match wins. If nothing matches, the call falls through to the permission mode (<code class="mono-v">acceptEdits</code>).
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/shell.js"></script>
+<script>
+(function(){
+  var svg = Shell.svg, chip = Shell.chip;
+  // fix the literal placeholders used above (kept simple in markup)
+  document.querySelector('.view-head .btn').innerHTML = 'Edit rules '+svg('sliders',13);
+  document.querySelector('.banner.warn .b-ico').innerHTML = svg('alert',16);
+
+  var RULES = [
+    {n:1, beh:'deny', spec:'Bash(curl *)', scope:'managed'},
+    {n:2, beh:'deny', spec:'Read(//etc/secrets/**)', scope:'managed'},
+    {n:3, beh:'deny', spec:'Read(~/.ssh/**)', scope:'user'},
+    {n:4, beh:'deny', spec:'Read(./.env)', scope:'project'},
+    {n:5, beh:'deny', spec:'Read(./.env.*)', scope:'project'},
+    {n:6, beh:'ask',  spec:'Bash(git push *)', scope:'project'},
+    {n:7, beh:'allow',spec:'Bash(git diff *)', scope:'user'},
+    {n:8, beh:'allow',spec:'Bash(git log *)', scope:'user'},
+    {n:9, beh:'allow',spec:'Bash(npm run *)', scope:'project'},
+    {n:10,beh:'allow',spec:'Bash(curl localhost*)', scope:'project', unreachable:'Unreachable — always matched first by managed deny #1 Bash(curl *).'}
+  ];
+
+  // ---- render grouped rule list ----
+  function ruleRow(r){
+    var warn = r.unreachable ? '<div class="rule-warn">'+svg('alert',13)+r.unreachable+'</div>' : '';
+    return '<div class="rule'+(r.unreachable?' unreachable':'')+'" data-n="'+r.n+'">'+
+      '<span class="idx">'+r.n+'</span>'+
+      '<span class="beh '+r.beh+'">'+r.beh+'</span>'+
+      '<span class="spec">'+r.spec+'</span>'+
+      '<span class="src">'+chip(r.scope)+'</span>'+
+    '</div>'+ warn;
+  }
+  var groups=[['deny','Deny — checked first'],['ask','Ask'],['allow','Allow']];
+  var html='';
+  groups.forEach(function(g){
+    var rs=RULES.filter(function(r){return r.beh===g[0];});
+    html += '<div class="group-label"><span class="beh '+g[0]+'">'+g[0]+'</span>'+g[1]+'<span style="margin-left:auto" class="hint">'+rs.length+'</span></div>';
+    html += rs.map(ruleRow).join('');
+  });
+  document.getElementById('ruleList').innerHTML = html;
+
+  // ---- glob matcher ----
+  function toRe(spec){
+    // spec like Tool(pattern). Build regex for whole string.
+    var m = spec.match(/^([A-Za-z]+)\((.*)\)$/);
+    if (!m) return null;
+    var tool=m[1], pat=m[2];
+    var esc = pat.replace(/[.+^${}()|[\]\\]/g,'\\$&').replace(/\*/g,'.*');
+    return { tool:tool, re:new RegExp('^'+esc+'$') , patEsc:esc };
+  }
+  function parseInput(s){ var m=s.match(/^([A-Za-z]+)\((.*)\)$/); return m?{tool:m[1],arg:m[2]}:null; }
+
+  function evaluate(input){
+    var p = parseInput(input.trim());
+    if (!p) return {error:true};
+    var matches=[];
+    RULES.forEach(function(r){
+      var c=toRe(r.spec); if(!c) return;
+      if (c.tool===p.tool && c.re.test(p.arg)) matches.push(r);
+    });
+    var winner = matches[0] || null; // already in eval order
+    return {p:p, matches:matches, winner:winner};
+  }
+
+  function showOutcome(input){
+    var res = evaluate(input);
+    var out = document.getElementById('outcome');
+    Array.prototype.forEach.call(document.querySelectorAll('.rule'),function(x){x.classList.remove('hit');});
+    if (res.error){ out.innerHTML='<div class="outcome fall"><div class="ob-top">'+svg('info',16)+'Unparseable</div><div class="ob-sub">Use the form <code>Tool(specifier)</code>, e.g. <code>Bash(git push origin main)</code>.</div></div>'; return; }
+    var w=res.winner;
+    if (!w){
+      out.innerHTML='<div class="outcome fall"><div class="ob-top">'+svg('info',16)+'Default behaviour</div>'+
+        '<div class="ob-sub">No rule matched <code>'+input+'</code> → falls through to permission mode <b>acceptEdits</b>.</div></div>';
+      return;
+    }
+    var cls = w.beh==='deny'?'denied':(w.beh==='ask'?'ask':'allowed');
+    var word = w.beh==='deny'?'Denied':(w.beh==='ask'?'Ask':'Allowed');
+    var ico = w.beh==='deny'?'xcircle':(w.beh==='ask'?'alert':'check');
+    var trace = 'Matched rule #'+w.n+' <code>'+w.spec+'</code> ('+Shell.SCOPES[w.scope].label+').';
+    // note when an allow was shadowed by an earlier deny
+    if (w.beh==='deny'){
+      var laterAllow = res.matches.filter(function(m){return m.beh==='allow';})[0];
+      if (laterAllow) trace += ' Note: allow #'+laterAllow.n+' <code>'+laterAllow.spec+'</code> would also match, but deny is evaluated first.';
+    }
+    out.innerHTML='<div class="outcome '+cls+'"><div class="ob-top">'+svg(ico,16)+word+'</div><div class="ob-sub">'+trace+'</div></div>';
+    var hit=document.querySelector('.rule[data-n="'+w.n+'"]'); if(hit){ hit.classList.add('hit'); }
+  }
+
+  // ---- examples (B3) ----
+  var EX=['Bash(curl localhost:3000/health)','Bash(git push origin main)','Bash(npm run test)','Read(./src/main.ts)'];
+  document.getElementById('examples').innerHTML = EX.map(function(e){return '<span class="ex">'+e+'</span>';}).join('');
+  Array.prototype.forEach.call(document.querySelectorAll('.ex'),function(el){
+    el.addEventListener('click',function(){ var v=el.textContent; document.getElementById('testIn').value=v; showOutcome(v); });
+  });
+  document.getElementById('testRun').addEventListener('click',function(){ showOutcome(document.getElementById('testIn').value); });
+  document.getElementById('testIn').addEventListener('keydown',function(e){ if(e.key==='Enter') showOutcome(this.value); });
+
+  // preload first example
+  document.getElementById('testIn').value = EX[0];
+  showOutcome(EX[0]);
+})();
+</script>
+</body>
+</html>
