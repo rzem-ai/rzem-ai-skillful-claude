@@ -1,6 +1,6 @@
-# Config Studio - Design Brief
+# Skillful Claude - Design Brief
 
-Input for Claude Design. Read alongside `claude-code-config-studio-structure.md` (the logical spec) and `config-studio-fixtures.md` (sample data - design every screen against it).
+Input for Claude Design. Read alongside `structure.md` (the logical spec) and `fixtures.md` (sample data - design every screen against it).
 
 ---
 

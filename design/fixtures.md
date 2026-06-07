@@ -1,8 +1,8 @@
-# Config Studio - Design Fixture Set
+# Skillful Claude - Design Fixture Set
 
-Sample configuration data for designing Config Studio. Every screen should be mocked against this one fixture, not placeholder data. It is deliberately engineered: every scenario the UI must handle - shadowing, array merges, an unbeatable deny, an ignored setting, a wrong-file key, an unresolved variable, a name collision, a broken file, a secret, and a missing import - appears exactly once.
+Sample configuration data for designing Skillful Claude. Every screen should be mocked against this one fixture, not placeholder data. It is deliberately engineered: every scenario the UI must handle - shadowing, array merges, an unbeatable deny, an ignored setting, a wrong-file key, an unresolved variable, a name collision, a broken file, a secret, and a missing import - appears exactly once.
 
-**Fixture project**: `config-studio`, located at `~/Projects/config-studio`, a git repo. Current user: `alex`.
+**Fixture project**: `skillful-claude`, located at `~/Projects/skillful-claude`, a git repo. Current user: `alex`.
 
 ---
 
@@ -69,7 +69,7 @@ Demonstrates:
 
 ### A3. Project settings
 
-`~/Projects/config-studio/.claude/settings.json` - valid, committed, last modified 2026-06-05:
+`~/Projects/skillful-claude/.claude/settings.json` - valid, committed, last modified 2026-06-05:
 
 ```json
 {
@@ -80,7 +80,7 @@ Demonstrates:
     "allow": ["Bash(npm run *)", "Bash(curl localhost*)"],
     "ask": ["Bash(git push *)"],
     "deny": ["Read(./.env)", "Read(./.env.*)"],
-    "additionalDirectories": ["../config-studio-docs/"]
+    "additionalDirectories": ["../skillful-claude-docs/"]
   },
   "enabledPlugins": {
     "formatter@team-tools": true
@@ -100,7 +100,7 @@ Demonstrates:
 
 ### A4. Local settings
 
-`~/Projects/config-studio/.claude/settings.local.json` - valid, gitignored, last modified 2026-06-06:
+`~/Projects/skillful-claude/.claude/settings.local.json` - valid, gitignored, last modified 2026-06-06:
 
 ```json
 {
@@ -134,7 +134,7 @@ Demonstrates:
     }
   },
   "projects": {
-    "/home/alex/Projects/config-studio": {
+    "/home/alex/Projects/skillful-claude": {
       "mcpServers": {
         "scratch-db": {
           "type": "stdio",
@@ -152,7 +152,7 @@ Demonstrates: user-scope `github` server (collision with A6), local-scope `scrat
 
 ### A6. Project MCP
 
-`~/Projects/config-studio/.mcp.json` - valid, committed:
+`~/Projects/skillful-claude/.mcp.json` - valid, committed:
 
 ```json
 {
@@ -183,15 +183,15 @@ Demonstrates:
 
 ```text
 ~/.claude/CLAUDE.md                                  # exists, 14 lines, loads always
-~/Projects/config-studio/CLAUDE.md                   # exists, see imports below
-~/Projects/config-studio/CLAUDE.local.md             # exists, gitignored badge
-~/Projects/config-studio/engine/CLAUDE.md            # exists, BELOW cwd → "lazy-load" marker
+~/Projects/skillful-claude/CLAUDE.md                   # exists, see imports below
+~/Projects/skillful-claude/CLAUDE.local.md             # exists, gitignored badge
+~/Projects/skillful-claude/engine/CLAUDE.md            # exists, BELOW cwd → "lazy-load" marker
 ```
 
-`~/Projects/config-studio/CLAUDE.md` contains:
+`~/Projects/skillful-claude/CLAUDE.md` contains:
 
 ```markdown
-# Config Studio
+# Skillful Claude
 
 Engine is pure logic - no UI imports allowed in engine/.
 
@@ -202,14 +202,14 @@ Engine is pure logic - no UI imports allowed in engine/.
 - `docs/git-workflow.md` exists (import depth 1, resolves)
 - `docs/style-guide.md` **does not exist** → broken-link flag in the Memory Map import graph
 
-Auto memory: `~/.claude/projects/-home-alex-Projects-config-studio/memory/MEMORY.md` exists (6 entries), auto memory **enabled**.
+Auto memory: `~/.claude/projects/-home-alex-Projects-skillful-claude/memory/MEMORY.md` exists (6 entries), auto memory **enabled**.
 
 ### A8. Extensions
 
 ```text
 ~/.claude/agents/code-reviewer.md          # user subagent, frontmatter: name, description, tools: [Read, Grep]
-~/Projects/config-studio/.claude/skills/release-notes/SKILL.md   # project skill
-~/Projects/config-studio/.claude/commands/changelog.md           # project slash command
+~/Projects/skillful-claude/.claude/skills/release-notes/SKILL.md   # project skill
+~/Projects/skillful-claude/.claude/commands/changelog.md           # project slash command
 ```
 
 Plus the plugin from A3/A4: `formatter@team-tools` (project-enabled, locally disabled).
