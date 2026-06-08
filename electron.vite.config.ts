@@ -43,6 +43,7 @@ export default defineConfig({
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
+        "@shared": fileURLToPath(new URL("./electron/shared", import.meta.url)),
       },
     },
     build: {

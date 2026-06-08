@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import log from 'electron-log/main.js';
+import { registerIpc, disposeIpc } from './ipc.js';
 
 // ESM doesn't have __dirname. We resolve it from import.meta.url so the
 // preload + renderer paths below work after the bundler emits ESM .mjs.
@@ -40,6 +41,9 @@ function createWindow(): void {
         mainWindow?.show();
     });
 
+    // Wire the config engine + write pipeline to the renderer.
+    registerIpc(mainWindow);
+
     // External links open in the user's browser, not a new Electron window.
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         void shell.openExternal(url);
@@ -69,5 +73,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+    disposeIpc();
     if (process.platform !== 'darwin') app.quit();
 });

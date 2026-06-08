@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "deny": ["Bash(curl *)", "Read(//etc/secrets/**)"]
+  },
+  "disableBypassPermissionsMode": "disable",
+  "forceLoginMethod": "claudeai",
+  "sandbox": {
+    "network": {
+      "deniedDomains": ["uploads.github.com"]
+    }
+  }
+}
