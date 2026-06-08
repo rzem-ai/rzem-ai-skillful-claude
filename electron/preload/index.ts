@@ -1,4 +1,4 @@
-import { contextBridge } from "electron";
+import { contextBridge } from 'electron';
 
 /**
  * The renderer is sandboxed and contextIsolation is on, so the only way
@@ -11,6 +11,6 @@ import { contextBridge } from "electron";
  */
 const api = {};
 
-contextBridge.exposeInMainWorld("api", api);
+contextBridge.exposeInMainWorld('api', api);
 
 export type DesktopApi = typeof api;

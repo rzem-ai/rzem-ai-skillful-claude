@@ -6,14 +6,14 @@
 // IPC channels, keeping it in lockstep with the preload and main process.
 
 export interface DesktopApi {
-  // Add namespaced method groups here, e.g.:
-  //   fs: { read: (path: string) => Promise<string> };
+    // Add namespaced method groups here, e.g.:
+    //   fs: { read: (path: string) => Promise<string> };
 }
 
 declare global {
-  interface Window {
-    api: DesktopApi;
-  }
+    interface Window {
+        api: DesktopApi;
+    }
 }
 
 export {};
