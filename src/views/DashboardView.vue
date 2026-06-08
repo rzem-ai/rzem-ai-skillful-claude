@@ -4,203 +4,12 @@ import { useRoute, useRouter } from 'vue-router';
 import Icon from '@/components/Icon.vue';
 import ProvenanceChip from '@/components/ProvenanceChip.vue';
 import { toast } from '@/composables/useToast';
-import type { ScopeId } from '@/lib/scopes';
+import { useConfigStore } from '@/stores/config';
+import type { ConfigRow, ScopeId } from '@shared/contract';
 
-// ── Fixture: effective config (resolved keys + their resolution chains) ──
-interface ChainEntry {
-    scope: ScopeId;
-    value: string;
-    status: 'winner' | 'shadowed' | 'ignored';
-    path: string;
-    mod: string;
-    note?: string;
-    action?: string;
-}
-interface ConfigRow {
-    key: string;
-    value: string;
-    type: string;
-    cat: string;
-    scope: ScopeId | null;
-    differ: boolean;
-    conflict: boolean;
-    hero?: boolean;
-    secret?: boolean;
-    locked?: boolean;
-    inert?: boolean;
-    isDefault?: boolean;
-    channel?: string;
-    lint?: string;
-    chain: ChainEntry[];
-}
-
-const DATA: ConfigRow[] = [
-    {
-        key: 'model',
-        value: 'claude-sonnet-4-6',
-        type: 'string',
-        cat: 'model',
-        scope: 'project',
-        differ: true,
-        conflict: true,
-        chain: [
-            { scope: 'project', value: 'claude-sonnet-4-6', status: 'winner', path: '.claude/settings.json', mod: 'Jun 5' },
-            { scope: 'user', value: 'claude-opus-4-7', status: 'shadowed', path: '~/.claude/settings.json', mod: 'Jun 2', note: 'Shadowed by Project' },
-        ],
-    },
-    {
-        key: 'permissions.defaultMode',
-        value: 'acceptEdits',
-        type: 'enum',
-        cat: 'permissions',
-        scope: 'project',
-        differ: true,
-        conflict: true,
-        hero: true,
-        chain: [
-            { scope: 'project', value: 'acceptEdits', status: 'winner', path: '.claude/settings.json', mod: 'Jun 5' },
-            { scope: 'user', value: 'plan', status: 'shadowed', path: '~/.claude/settings.json', mod: 'Jun 2', note: 'Shadowed by Project' },
-            {
-                scope: 'local',
-                value: 'auto',
-                status: 'ignored',
-                path: '.claude/settings.local.json',
-                mod: 'Jun 6',
-                note: 'Ignored — “auto” mode can only be set in user settings (since v2.1.142). This entry has no effect.',
-                action: 'Move to user settings',
-            },
-        ],
-    },
-    {
-        key: 'outputStyle',
-        value: 'Explanatory',
-        type: 'string',
-        cat: 'quality',
-        scope: 'local',
-        differ: true,
-        conflict: false,
-        chain: [{ scope: 'local', value: 'Explanatory', status: 'winner', path: '.claude/settings.local.json', mod: 'Jun 6' }],
-    },
-    {
-        key: 'effortLevel',
-        value: 'high',
-        type: 'enum',
-        cat: 'model',
-        scope: 'user',
-        differ: true,
-        conflict: false,
-        chain: [{ scope: 'user', value: 'high', status: 'winner', path: '~/.claude/settings.json', mod: 'Jun 2' }],
-    },
-    {
-        key: 'alwaysThinkingEnabled',
-        value: 'true',
-        type: 'boolean',
-        cat: 'model',
-        scope: 'user',
-        differ: true,
-        conflict: false,
-        chain: [{ scope: 'user', value: 'true', status: 'winner', path: '~/.claude/settings.json', mod: 'Jun 2' }],
-    },
-    {
-        key: 'editorMode',
-        value: 'vim',
-        type: 'enum',
-        cat: 'quality',
-        scope: 'user',
-        differ: true,
-        conflict: false,
-        chain: [{ scope: 'user', value: 'vim', status: 'winner', path: '~/.claude/settings.json', mod: 'Jun 2' }],
-    },
-    {
-        key: 'env.NODE_ENV',
-        value: 'development',
-        type: 'string',
-        cat: 'environment',
-        scope: 'user',
-        differ: true,
-        conflict: false,
-        chain: [{ scope: 'user', value: 'development', status: 'winner', path: '~/.claude/settings.json', mod: 'Jun 2' }],
-    },
-    {
-        key: 'env.NPM_TOKEN',
-        value: 'npm_4xK9fT2mQ8vLpR3sW7yB1nC5dH6jZ0aE',
-        type: 'string',
-        cat: 'environment',
-        scope: 'user',
-        differ: true,
-        conflict: false,
-        secret: true,
-        chain: [{ scope: 'user', value: 'npm_••••••••••••', status: 'winner', path: '~/.claude/settings.json', mod: 'Jun 2' }],
-    },
-    {
-        key: 'forceLoginMethod',
-        value: 'claudeai',
-        type: 'enum',
-        cat: 'security',
-        scope: 'managed',
-        differ: true,
-        conflict: false,
-        locked: true,
-        channel: 'Enforced via file — /etc/claude-code/managed-settings.json',
-        chain: [{ scope: 'managed', value: 'claudeai', status: 'winner', path: '/etc/claude-code/managed-settings.json', mod: 'May 12' }],
-    },
-    {
-        key: 'disableBypassPermissionsMode',
-        value: 'disable',
-        type: 'enum',
-        cat: 'security',
-        scope: 'managed',
-        differ: true,
-        conflict: false,
-        locked: true,
-        channel: 'Enforced via file — /etc/claude-code/managed-settings.json',
-        chain: [{ scope: 'managed', value: 'disable', status: 'winner', path: '/etc/claude-code/managed-settings.json', mod: 'May 12' }],
-    },
-    {
-        key: 'autoConnectIde',
-        value: '—',
-        type: 'inert',
-        cat: 'ide',
-        scope: null,
-        differ: false,
-        conflict: true,
-        inert: true,
-        lint: 'This key is ignored here — it belongs in ~/.claude.json. It currently has no effect.',
-        chain: [
-            {
-                scope: 'user',
-                value: 'true',
-                status: 'ignored',
-                path: '~/.claude/settings.json',
-                mod: 'Jun 2',
-                note: 'Wrong file — autoConnectIde is a global-config key. It must live in ~/.claude.json or it is silently ignored.',
-                action: 'Move to ~/.claude.json',
-            },
-        ],
-    },
-    {
-        key: 'spinnerTipsEnabled',
-        value: 'true',
-        type: 'boolean',
-        cat: 'quality',
-        scope: null,
-        differ: false,
-        conflict: false,
-        isDefault: true,
-        lint: 'A managed drop-in tried to set this to false, but that file is invalid JSON and was excluded. Falling back to default.',
-        chain: [
-            {
-                scope: 'managed',
-                value: 'false',
-                status: 'ignored',
-                path: 'managed-settings.d/20-experimental.json',
-                mod: '—',
-                note: 'Source file is invalid JSON (trailing comma, line 4) — excluded from resolution. Effective value falls back to default true.',
-                action: 'Open in Raw Editor',
-            },
-        ],
-    },
-];
+// Effective config + resolution chains come live from the engine snapshot.
+const config = useConfigStore();
+const DATA = computed<ConfigRow[]>(() => config.dashboard);
 
 const SCOPE_FILTERS: ScopeId[] = ['managed', 'local', 'project', 'user'];
 
@@ -223,7 +32,7 @@ const route = useRoute();
 const router = useRouter();
 
 const rows = computed(() =>
-    DATA.filter((d) => {
+    DATA.value.filter((d) => {
         const q = search.value.trim().toLowerCase();
         if (q && !d.key.toLowerCase().includes(q) && !String(d.value).toLowerCase().includes(q)) return false;
         if (cat.value && d.cat !== cat.value) return false;
@@ -234,7 +43,7 @@ const rows = computed(() =>
     }),
 );
 
-const selected = computed(() => DATA.find((d) => d.key === selectedKey.value) ?? null);
+const selected = computed(() => DATA.value.find((d) => d.key === selectedKey.value) ?? null);
 
 function vclass(t: string): string {
     return (
@@ -273,7 +82,7 @@ onMounted(() => {
     const q = route.query.q;
     if (typeof q === 'string' && q) {
         search.value = q;
-        const hit = DATA.find((d) => d.key.toLowerCase().includes(q.toLowerCase()));
+        const hit = DATA.value.find((d) => d.key.toLowerCase().includes(q.toLowerCase()));
         if (hit) selectKey(hit.key);
     }
 });
@@ -286,8 +95,14 @@ onMounted(() => {
                 <div class="col">
                     <h1>Effective Configuration</h1>
                     <span class="sub">
-                        Every key in effect for
-                        <b class="muted">config-studio</b>
+                        Every key in effect
+                        <template v-if="config.project">
+                            for
+                            <b class="muted">{{ config.project.name }}</b>
+                        </template>
+                        <template v-else>
+                            (no project selected — showing user &amp; managed scopes)
+                        </template>
                         — resolved value, type, and where it came from.
                     </span>
                 </div>
@@ -338,6 +153,11 @@ onMounted(() => {
                             </tr>
                         </thead>
                         <tbody>
+                            <tr v-if="!rows.length">
+                                <td colspan="5" class="dim" style="padding: 22px 14px; text-align: center; font-size: 12px">
+                                    {{ config.loading ? 'Resolving configuration…' : 'No configuration keys in effect for the active scopes.' }}
+                                </td>
+                            </tr>
                             <tr v-for="d in rows" :key="d.key" :class="{ sel: d.key === selectedKey }" @click="selectKey(d.key)">
                                 <td>
                                     <span class="k">{{ d.key }}</span>

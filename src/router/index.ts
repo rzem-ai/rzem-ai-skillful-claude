@@ -24,6 +24,8 @@ export const router = createRouter({
             path: '/',
             component: AppShell,
             children: [
+                // Land on the Dashboard — the primary "what's in effect" view.
+                { path: '', redirect: '/dashboard' },
                 { path: '/dashboard', name: 'dashboard', component: DashboardView, meta: { navId: 'dashboard' } },
                 { path: '/scope-stack', name: 'scope-stack', component: ScopeStackView, meta: { navId: 'scope' } },
                 { path: '/permissions', name: 'permissions', component: PermissionsView, meta: { navId: 'permissions' } },

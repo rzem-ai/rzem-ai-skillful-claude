@@ -1,46 +1,32 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import Icon from '@/components/Icon.vue';
 import ProvenanceChip from '@/components/ProvenanceChip.vue';
 import { toast } from '@/composables/useToast';
-import { SCOPES, type ScopeId } from '@/lib/scopes';
-
-// ── Fixtures ──────────────────────────────────────────────────────────────
-type Behaviour = 'allow' | 'ask' | 'deny';
-
-interface Mode {
-    v: string;
-    label: string;
-    d: string;
-    cur?: boolean;
-    userOnly?: boolean;
-    locked?: boolean;
-}
+import { useConfigStore } from '@/stores/config';
+import { SCOPES } from '@/lib/scopes';
+import type { Behaviour, ChangeOp, DiffLine, GuidedRule, ScopeId } from '@shared/contract';
 
 interface ScopeOption {
     v: ScopeId;
     t: string;
     d: string;
 }
-
-interface Rule {
-    beh: Behaviour;
-    spec: string;
-    scope: ScopeId;
-    locked?: boolean;
-}
-
 interface Pending {
     id: string;
     label: string;
+    op: ChangeOp;
 }
 
-const MODES: Mode[] = [
-    { v: 'plan', label: 'plan', d: 'Read-only planning' },
-    { v: 'acceptEdits', label: 'acceptEdits', d: 'Auto-accept edits', cur: true },
-    { v: 'auto', label: 'auto', d: 'Fully autonomous', userOnly: true },
-    { v: 'bypassPermissions', label: 'bypassPermissions', d: 'Skip all prompts', locked: true },
-];
+const config = useConfigStore();
+const guided = computed(() => config.guidedPermissions);
+
+// Mode buttons + merged rules come live from the engine; the form drives real
+// writes through the write-target resolver.
+const MODES = computed(() => guided.value?.modes ?? []);
+const effectiveMode = computed(() => guided.value?.effectiveMode ?? 'default');
+const effectiveScope = computed(() => guided.value?.effectiveModeScope ?? null);
+const bypassLock = computed(() => guided.value?.bypassLock ?? null);
 
 const SCOPE_OPTS: ScopeOption[] = [
     { v: 'user', t: 'Just me (all projects)', d: '~/.claude/settings.json' },
@@ -48,111 +34,95 @@ const SCOPE_OPTS: ScopeOption[] = [
     { v: 'local', t: 'Just me, this project', d: '.claude/settings.local.json · gitignored' },
 ];
 
-const INITIAL_RULES: Rule[] = [
-    { beh: 'deny', spec: 'Bash(curl *)', scope: 'managed', locked: true },
-    { beh: 'deny', spec: 'Read(~/.ssh/**)', scope: 'user' },
-    { beh: 'deny', spec: 'Read(./.env)', scope: 'project' },
-    { beh: 'ask', spec: 'Bash(git push *)', scope: 'project' },
-    { beh: 'allow', spec: 'Bash(git diff *)', scope: 'user' },
-    { beh: 'allow', spec: 'Bash(npm run *)', scope: 'project' },
-];
-
 const BEHAVIOURS: Behaviour[] = ['allow', 'ask', 'deny'];
 const TOOLS = ['Bash', 'Read', 'Edit', 'Write', 'WebFetch'];
 
 // ── Reactive state ────────────────────────────────────────────────────────
 const pending = ref<Pending[]>([]);
-const curMode = ref('acceptEdits');
-const rules = ref<Rule[]>(INITIAL_RULES.map((r) => ({ ...r })));
-
-// Scope selectors — default to "project" as in the prototype (dataset.def).
+const curMode = ref(effectiveMode.value);
+const rules = ref<GuidedRule[]>([]);
 const modeScopeSel = ref<ScopeId>('project');
 const ruleScopeSel = ref<ScopeId>('project');
-
-// Composer
 const cBeh = ref<Behaviour>('allow');
-const cTool = ref<string>('Bash');
-const cSpec = ref<string>('');
-
-// Apply bar
+const cTool = ref('Bash');
+const cSpec = ref('');
 const showDiff = ref(true);
-
-// Modal
 const modalOpen = ref(false);
 
-// ── Derived ───────────────────────────────────────────────────────────────
+// Keep the editable copy in sync with the engine until the user starts editing.
+watch(
+    guided,
+    (g) => {
+        if (!g) return;
+        if (pending.value.length === 0) {
+            curMode.value = g.effectiveMode;
+            rules.value = g.rules.map((r) => ({ ...r }));
+        }
+    },
+    { immediate: true },
+);
+
 const pendN = computed(() => pending.value.length);
 const canApply = computed(() => pending.value.length > 0);
-
-// "auto" mode is honoured only from user settings — non-user options disabled.
-const modeDisableNonUser = computed(() => MODES.find((m) => m.v === curMode.value)?.userOnly === true);
+const modeDisableNonUser = computed(() => MODES.value.find((m) => m.v === curMode.value)?.userOnly === true);
 const modeWhy = 'auto can only be set in user settings';
 
 interface Effect {
     kind: 'info' | 'warn';
     html: string;
 }
-
 const modeEffect = computed<Effect>(() => {
-    const m = MODES.find((x) => x.v === curMode.value);
+    const m = MODES.value.find((x) => x.v === curMode.value);
     if (m?.userOnly) {
-        return {
-            kind: 'warn',
-            html: '<b>auto</b> mode is honoured only from <b>user</b> settings. Project / local placements are silently ignored (since v2.1.142).',
-        };
+        return { kind: 'warn', html: '<b>auto</b> mode is honoured only from <b>user</b> settings. Project / local placements are silently ignored (since v2.1.142).' };
     }
-    if (curMode.value === 'acceptEdits') {
-        return {
-            kind: 'info',
-            html: 'No change — this is already the effective value (from Project settings).',
-        };
+    if (curMode.value === effectiveMode.value) {
+        return { kind: 'info', html: `No change — this is already the effective value (from ${effectiveScope.value ?? 'default'}).` };
     }
-    return {
-        kind: 'info',
-        html: 'This will override the current Project value <code>acceptEdits</code> for the selected scope.',
-    };
+    return { kind: 'info', html: `This will set <code>${curMode.value}</code> for the selected scope.` };
 });
 
-// ── Pending change helpers ────────────────────────────────────────────────
-function regPending(id: string, label: string): void {
-    if (!pending.value.find((p) => p.id === id)) {
-        pending.value.push({ id, label });
-    }
+function regPending(id: string, label: string, op: ChangeOp): void {
+    const existing = pending.value.findIndex((p) => p.id === id);
+    if (existing >= 0) pending.value[existing] = { id, label, op };
+    else pending.value.push({ id, label, op });
 }
 function unreg(id: string): void {
     pending.value = pending.value.filter((p) => p.id !== id);
 }
 
-// ── Mode selection ────────────────────────────────────────────────────────
-function selectMode(m: Mode): void {
+function selectMode(m: { v: string; locked?: boolean; userOnly?: boolean }): void {
     if (m.locked) return;
     curMode.value = m.v;
-    // If switching to a user-only mode while a non-user scope is selected,
-    // the disabled state forces user — reflect that in the selection.
     if (m.userOnly) modeScopeSel.value = 'user';
-    if (curMode.value !== 'acceptEdits') {
-        regPending('defaultMode', `Set defaultMode = "${curMode.value}"`);
-    } else {
-        unreg('defaultMode');
-    }
+    syncModePending();
 }
-
-// ── Scope selector interaction ────────────────────────────────────────────
 function selectModeScope(o: ScopeOption): void {
     if (modeDisableNonUser.value && o.v !== 'user') return;
     modeScopeSel.value = o.v;
+    syncModePending();
+}
+function syncModePending(): void {
+    if (curMode.value === effectiveMode.value && modeScopeSel.value === effectiveScope.value) {
+        unreg('defaultMode');
+    } else {
+        regPending('defaultMode', `Set defaultMode = "${curMode.value}" (${SCOPES[modeScopeSel.value].label})`, {
+            kind: 'setDefaultMode',
+            mode: curMode.value,
+            scope: modeScopeSel.value,
+        });
+    }
 }
 function selectRuleScope(o: ScopeOption): void {
     ruleScopeSel.value = o.v;
 }
 
-// ── Rules ─────────────────────────────────────────────────────────────────
 function removeRule(i: number): void {
     const r = rules.value[i];
+    if (r.locked) return;
     rules.value.splice(i, 1);
-    regPending('del' + r.spec, `Remove ${r.beh} ${r.spec}`);
+    regPending('del' + r.spec, `Remove ${r.beh} ${r.spec}`, { kind: 'removeRule', beh: r.beh, spec: r.spec, scope: r.scope });
 }
-
 function addRule(): void {
     const spec = cSpec.value.trim();
     if (!spec) {
@@ -161,60 +131,80 @@ function addRule(): void {
     }
     const full = `${cTool.value}(${spec})`;
     rules.value.push({ beh: cBeh.value, spec: full, scope: ruleScopeSel.value });
-    regPending('add' + full, `Add ${cBeh.value} ${full} (${SCOPES[ruleScopeSel.value].label})`);
+    regPending('add' + full, `Add ${cBeh.value} ${full} (${SCOPES[ruleScopeSel.value].label})`, {
+        kind: 'addRule',
+        beh: cBeh.value,
+        spec: full,
+        scope: ruleScopeSel.value,
+    });
     cSpec.value = '';
 }
 
-// ── Discard / apply / modal ───────────────────────────────────────────────
 function discard(): void {
     pending.value = [];
+    if (guided.value) {
+        curMode.value = guided.value.effectiveMode;
+        rules.value = guided.value.rules.map((r) => ({ ...r }));
+    }
     toast('Pending changes discarded', 'check');
 }
 
-function apply(): void {
-    if (pending.value.length === 0) return;
-    if (showDiff.value) modalOpen.value = true;
-    else commit();
+// ── Diff preview built from real engine previews ───────────────────────────
+const fileLines = ref<DiffLine[]>([]);
+const effLines = ref<DiffLine[]>([]);
+
+async function buildPreview(): Promise<void> {
+    const file: DiffLine[] = [];
+    const eff: DiffLine[] = [];
+    for (const p of pending.value) {
+        const { preview, blocked } = await config.previewChange(p.op);
+        if (blocked) {
+            toast(blocked, 'alert');
+            continue;
+        }
+        if (preview) {
+            file.push(...preview.file.lines);
+            eff.push(...preview.effective);
+        }
+    }
+    fileLines.value = file;
+    effLines.value = eff;
 }
 
+async function apply(): Promise<void> {
+    if (pending.value.length === 0) return;
+    if (showDiff.value) {
+        await buildPreview();
+        modalOpen.value = true;
+    } else {
+        await commit();
+    }
+}
 function closeDiff(): void {
     modalOpen.value = false;
 }
-
-function confirmDiff(): void {
+async function confirmDiff(): Promise<void> {
     modalOpen.value = false;
-    commit();
+    await commit();
 }
-
-function commit(): void {
-    const n = pending.value.length;
+async function commit(): Promise<void> {
+    const ops = [...pending.value];
+    let ok = 0;
+    let backup: string | undefined;
+    for (const p of ops) {
+        const res = await config.applyChange(p.op);
+        if (res.ok) {
+            ok++;
+            backup = res.backupPath ?? backup;
+        } else {
+            toast(res.blocked ?? res.error ?? 'Write failed', 'alert');
+        }
+    }
     pending.value = [];
-    toast(`${n} change${n > 1 ? 's' : ''} written · backup created`, 'check', 'Undo', () => toast('Restored from backup', 'check'));
+    if (ok > 0) {
+        toast(`${ok} change${ok > 1 ? 's' : ''} written${backup ? ' · backup created' : ''}`, 'check');
+    }
 }
-
-// ── Diff rendering ────────────────────────────────────────────────────────
-interface DiffLine {
-    add: boolean;
-    text: string;
-}
-
-// File diff — first 4 pending entries rendered as added/removed JSON-ish lines.
-const fileLines = computed<DiffLine[]>(() =>
-    pending.value.slice(0, 4).map((p) => {
-        const add = p.label.indexOf('Remove') < 0;
-        if (!add) {
-            return { add: false, text: `    (removed) ${p.label.replace('Remove ', '')}` };
-        }
-        if (p.label.indexOf('defaultMode') >= 0) {
-            return { add: true, text: `    "defaultMode": "${curMode.value}""` };
-        }
-        const stripped = p.label.replace(/^(Add|Remove) (allow|ask|deny) /, '').replace(/ \(.+\)$/, '');
-        return { add: true, text: `    "${stripped}"` };
-    }),
-);
-
-// Effective-config diff — the "what actually changes" thesis block.
-const effLines = computed<DiffLine[]>(() => pending.value.map((p) => ({ add: p.label.indexOf('Remove') < 0, text: p.label })));
 </script>
 
 <template>
@@ -240,8 +230,8 @@ const effLines = computed<DiffLine[]>(() => pending.value.map((p) => ({ add: p.l
                             <h3>Default permission mode</h3>
                             <span class="hint" style="margin-left: auto">
                                 Currently resolves to
-                                <code class="mono-v">acceptEdits</code>
-                                (Project)
+                                <code class="mono-v">{{ effectiveMode }}</code>
+                                <template v-if="effectiveScope">({{ effectiveScope }})</template>
                             </span>
                         </div>
                         <div class="card-b">
@@ -369,16 +359,14 @@ const effLines = computed<DiffLine[]>(() => pending.value.map((p) => ({ add: p.l
                     </div>
 
                     <!-- Locked example -->
-                    <div class="card mb">
+                    <div v-if="bypassLock" class="card mb">
                         <div class="card-h"><h3>Bypass-permissions mode</h3></div>
                         <div class="card-b">
                             <div class="locked">
                                 <span class="lk-ico"><Icon name="lock" :size="16" /></span>
                                 <div>
-                                    <div class="lk-val">disableBypassPermissionsMode = "disable"</div>
-                                    <div class="lk-chan">
-                                        Locked by managed policy · Enforced via file — /etc/claude-code/managed-settings.json. This control cannot be changed from this machine.
-                                    </div>
+                                    <div class="lk-val">{{ bypassLock.value }}</div>
+                                    <div class="lk-chan">{{ bypassLock.channel }}</div>
                                 </div>
                             </div>
                         </div>
@@ -416,20 +404,16 @@ const effLines = computed<DiffLine[]>(() => pending.value.map((p) => ({ add: p.l
                     <div class="diff-block">
                         <div class="diff-h">
                             <Icon name="file" :size="13" />
-                            File diff · .claude/settings.json
+                            File diff
                         </div>
                         <div class="diff">
-                            <div class="ln">
+                            <div v-if="!fileLines.length" class="ln">
                                 <span class="gut">…</span>
-                                <span class="txt">"permissions": {</span>
+                                <span class="txt">no textual change</span>
                             </div>
                             <div v-for="(l, i) in fileLines" :key="'f' + i" class="ln" :class="l.add ? 'add' : 'del'">
                                 <span class="gut">{{ l.add ? '+' : '-' }}</span>
                                 <span class="txt">{{ l.text }}</span>
-                            </div>
-                            <div class="ln">
-                                <span class="gut">…</span>
-                                <span class="txt">}</span>
                             </div>
                         </div>
                     </div>

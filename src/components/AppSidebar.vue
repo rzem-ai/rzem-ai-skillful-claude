@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import Icon from '@/components/Icon.vue';
+import { useConfigStore } from '@/stores/config';
 import type { IconName } from '@/lib/icons';
 
 // Left navigation: three workspaces (Visualise, Guided Config, Raw Editor)
-// with nested sections. Ported from shell.js NAV. Active state is driven by
-// each route's meta.navId so guided clones resolve to one highlighted item.
+// with nested sections. Active state is driven by each route's meta.navId so
+// guided clones resolve to one highlighted item. Counts + warn dots come live
+// from the engine snapshot.
 
 interface NavItem {
     id: string;
@@ -21,37 +24,44 @@ interface NavGroup {
     items: NavItem[];
 }
 
-const NAV: NavGroup[] = [
-    {
-        group: 'Visualise',
-        icon: 'layers',
-        items: [
-            { id: 'dashboard', label: 'Dashboard', to: '/dashboard', icon: 'grid' },
-            { id: 'scope', label: 'Scope Stack', to: '/scope-stack', icon: 'layers', warn: true },
-            { id: 'permissions', label: 'Permissions', to: '/permissions', icon: 'lock', count: '10' },
-            { id: 'mcp', label: 'MCP Servers', to: '/mcp', icon: 'db', count: '4' },
-            { id: 'memory', label: 'Memory', to: '/memory', icon: 'file', warn: true },
-            { id: 'extensions', label: 'Extensions', to: '/extensions', icon: 'puzzle', count: '4' },
-        ],
-    },
-    {
-        group: 'Guided Config',
-        icon: 'sliders',
-        items: [
-            { id: 'g-perm', label: 'Permissions', to: '/guided/permissions', icon: 'lock' },
-            { id: 'g-model', label: 'Model & Effort', to: '/guided/permissions', icon: 'sliders' },
-            { id: 'g-env', label: 'Environment', to: '/guided/permissions', icon: 'terminal' },
-            { id: 'g-mcp', label: 'MCP Servers', to: '/guided/permissions', icon: 'db' },
-            { id: 'g-mem', label: 'Memory', to: '/guided/permissions', icon: 'file' },
-        ],
-    },
-    {
-        group: 'Raw Editor',
-        icon: 'code',
-        items: [{ id: 'raw', label: 'Files & Editor', to: '/raw', icon: 'code' }],
-    },
-];
+const config = useConfigStore();
 
+const NAV = computed<NavGroup[]>(() => {
+    const c = config.counts;
+    const f = config.flags;
+    return [
+        {
+            group: 'Visualise',
+            icon: 'layers',
+            items: [
+                { id: 'dashboard', label: 'Dashboard', to: '/dashboard', icon: 'grid', count: c.keys ? String(c.keys) : undefined },
+                { id: 'scope', label: 'Scope Stack', to: '/scope-stack', icon: 'layers', warn: f.scopeWarn },
+                { id: 'permissions', label: 'Permissions', to: '/permissions', icon: 'lock', count: c.rules ? String(c.rules) : undefined },
+                { id: 'mcp', label: 'MCP Servers', to: '/mcp', icon: 'db', count: c.servers ? String(c.servers) : undefined },
+                { id: 'memory', label: 'Memory', to: '/memory', icon: 'file', warn: f.memoryWarn },
+                { id: 'extensions', label: 'Extensions', to: '/extensions', icon: 'puzzle', count: c.extensions ? String(c.extensions) : undefined },
+            ],
+        },
+        {
+            group: 'Guided Config',
+            icon: 'sliders',
+            items: [
+                { id: 'g-perm', label: 'Permissions', to: '/guided/permissions', icon: 'lock' },
+                { id: 'g-model', label: 'Model & Effort', to: '/guided/permissions', icon: 'sliders' },
+                { id: 'g-env', label: 'Environment', to: '/guided/permissions', icon: 'terminal' },
+                { id: 'g-mcp', label: 'MCP Servers', to: '/guided/permissions', icon: 'db' },
+                { id: 'g-mem', label: 'Memory', to: '/guided/permissions', icon: 'file' },
+            ],
+        },
+        {
+            group: 'Raw Editor',
+            icon: 'code',
+            items: [{ id: 'raw', label: 'Files & Editor', to: '/raw', icon: 'code' }],
+        },
+    ];
+});
+
+const claudeVersion = computed(() => config.claudeVersion || 'Claude Code');
 const route = useRoute();
 </script>
 
@@ -72,7 +82,7 @@ const route = useRoute();
         <div class="grow"></div>
         <div class="side-foot">
             <Icon name="info" :size="13" />
-            <span>Claude Code 2.1.144 · engine v0.9</span>
+            <span>{{ claudeVersion }} · engine live</span>
         </div>
     </nav>
 </template>

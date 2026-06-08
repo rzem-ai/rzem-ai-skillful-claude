@@ -2,37 +2,16 @@
 import { computed, ref } from 'vue';
 import Icon from '@/components/Icon.vue';
 import ProvenanceChip from '@/components/ProvenanceChip.vue';
-import { SCOPES, type ScopeId } from '@/lib/scopes';
+import { useConfigStore } from '@/stores/config';
+import { SCOPES } from '@/lib/scopes';
+import type { Behaviour, PermRule as Rule } from '@shared/contract';
 
-// ── Fixture: merged permission rules in real evaluation order ──
-type Behaviour = 'deny' | 'ask' | 'allow';
-
-interface Rule {
-    n: number;
-    beh: Behaviour;
-    spec: string;
-    scope: ScopeId;
-    unreachable?: string;
-}
-
-const RULES: Rule[] = [
-    { n: 1, beh: 'deny', spec: 'Bash(curl *)', scope: 'managed' },
-    { n: 2, beh: 'deny', spec: 'Read(//etc/secrets/**)', scope: 'managed' },
-    { n: 3, beh: 'deny', spec: 'Read(~/.ssh/**)', scope: 'user' },
-    { n: 4, beh: 'deny', spec: 'Read(./.env)', scope: 'project' },
-    { n: 5, beh: 'deny', spec: 'Read(./.env.*)', scope: 'project' },
-    { n: 6, beh: 'ask', spec: 'Bash(git push *)', scope: 'project' },
-    { n: 7, beh: 'allow', spec: 'Bash(git diff *)', scope: 'user' },
-    { n: 8, beh: 'allow', spec: 'Bash(git log *)', scope: 'user' },
-    { n: 9, beh: 'allow', spec: 'Bash(npm run *)', scope: 'project' },
-    {
-        n: 10,
-        beh: 'allow',
-        spec: 'Bash(curl localhost*)',
-        scope: 'project',
-        unreachable: 'Unreachable — always matched first by managed deny #1 Bash(curl *).',
-    },
-];
+// Merged rules, sandbox, and effective default mode come live from the engine.
+const config = useConfigStore();
+const RULES = computed<Rule[]>(() => config.permissions?.rules ?? []);
+const sandbox = computed(() => config.permissions?.sandbox ?? []);
+const fallMode = computed(() => config.permissions?.defaultMode ?? 'default');
+const unreachableCount = computed(() => config.permissions?.unreachableCount ?? 0);
 
 const GROUPS: { beh: Behaviour; label: string }[] = [
     { beh: 'deny', label: 'Deny — checked first' },
@@ -43,7 +22,7 @@ const GROUPS: { beh: Behaviour; label: string }[] = [
 const EXAMPLES = ['Bash(curl localhost:3000/health)', 'Bash(git push origin main)', 'Bash(npm run test)', 'Read(./src/main.ts)'];
 
 function rulesFor(beh: Behaviour): Rule[] {
-    return RULES.filter((r) => r.beh === beh);
+    return RULES.value.filter((r) => r.beh === beh);
 }
 
 // ── Glob matcher (ports toRe / parseInput / evaluate) ──
@@ -81,7 +60,7 @@ function evaluate(input: string): Evaluation {
     const p = parseInput(input.trim());
     if (!p) return { error: true, matches: [], winner: null };
     const matches: Rule[] = [];
-    RULES.forEach((r) => {
+    RULES.value.forEach((r) => {
         const c = toRe(r.spec);
         if (!c) return;
         if (c.tool === p.tool && c.re.test(p.arg)) matches.push(r);
@@ -161,15 +140,15 @@ const outcome = computed<Outcome>(() => {
                 </RouterLink>
             </div>
             <div class="view-body">
-                <div class="banner warn">
+                <div v-if="unreachableCount" class="banner warn">
                     <span class="b-ico"><Icon name="alert" :size="16" /></span>
                     <div>
-                        <b>1 unreachable rule.</b>
-                        A project-scope
+                        <b>{{ unreachableCount }} unreachable rule{{ unreachableCount > 1 ? 's' : '' }}.</b>
+                        A lower-scope
                         <code class="mono-v">allow</code>
-                        is permanently shadowed by a managed
+                        is permanently shadowed by a higher-priority
                         <code class="mono-v">deny</code>
-                        . See rule #10.
+                        .
                     </div>
                 </div>
                 <div class="perm-grid">
@@ -202,31 +181,18 @@ const outcome = computed<Outcome>(() => {
                                 <span class="hint" style="margin-left: auto">merged from permission rules + sandbox config</span>
                             </div>
                             <div class="card-b">
-                                <div class="sandbox-row">
-                                    <span class="sb-k">Filesystem deny</span>
+                                <div v-for="line in sandbox" :key="line.label" class="sandbox-row">
+                                    <span class="sb-k">{{ line.label }}</span>
                                     <div>
-                                        <code>~/.ssh/**</code>
-                                        ·
-                                        <code>./.env</code>
-                                        ·
-                                        <code>./.env.*</code>
-                                        ·
-                                        <code>//etc/secrets/**</code>
+                                        <template v-for="(it, i) in line.items" :key="it.code">
+                                            <code>{{ it.code }}</code>
+                                            <ProvenanceChip v-if="it.scope" :scope="it.scope" style="margin: 0 6px" />
+                                            <span v-else-if="i < line.items.length - 1"> · </span>
+                                        </template>
                                     </div>
                                 </div>
-                                <div class="sandbox-row">
-                                    <span class="sb-k">Extra directories</span>
-                                    <div>
-                                        <code>../config-studio-docs/</code>
-                                        <span class="tag info" style="margin-left: 6px">Project</span>
-                                    </div>
-                                </div>
-                                <div class="sandbox-row">
-                                    <span class="sb-k">Network deny</span>
-                                    <div>
-                                        <code>uploads.github.com</code>
-                                        <span class="tag lock" style="margin-left: 6px">Managed</span>
-                                    </div>
+                                <div v-if="!sandbox.length" class="sandbox-row">
+                                    <span class="dim" style="font-size: 12px">No sandbox restrictions in effect.</span>
                                 </div>
                             </div>
                         </div>
@@ -267,7 +233,7 @@ const outcome = computed<Outcome>(() => {
                                             No rule matched
                                             <code>{{ tested }}</code>
                                             → falls through to permission mode
-                                            <b>acceptEdits</b>
+                                            <b>{{ fallMode }}</b>
                                             .
                                         </div>
                                     </div>
@@ -290,7 +256,7 @@ const outcome = computed<Outcome>(() => {
                             →
                             <span style="color: var(--allow)">allow</span>
                             , first match wins. If nothing matches, the call falls through to the permission mode (
-                            <code class="mono-v">acceptEdits</code>
+                            <code class="mono-v">{{ fallMode }}</code>
                             ).
                         </div>
                     </div>

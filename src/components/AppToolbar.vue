@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import Icon from '@/components/Icon.vue';
 import { useTheme } from '@/composables/useTheme';
 import { toast } from '@/composables/useToast';
+import { useConfigStore } from '@/stores/config';
 
 // Top chrome: window traffic lights, project switcher, global search,
-// file-watcher heartbeat, read-only toggle, theme toggle. Ported from
-// shell.js buildToolbar. Search field is exposed for ⌘K focus.
+// file-watcher heartbeat, read-only toggle, theme toggle. Search field is
+// exposed for ⌘K focus. Project + sync state come from the engine store.
 const router = useRouter();
 const { theme, toggle: toggleTheme } = useTheme();
+const config = useConfigStore();
 
-const readOnly = ref(false);
 const search = ref('');
 const searchEl = ref<HTMLInputElement | null>(null);
+
+const projectName = computed(() => config.project?.name ?? 'No project');
+const projectPath = computed(() => config.project?.path ?? 'Click to choose a folder');
+const readOnly = computed(() => config.readOnly);
+const syncLabel = computed(() => (config.watching ? 'Watching · live' : 'Not watching'));
 
 defineExpose({ focusSearch: () => searchEl.value?.focus() });
 
@@ -23,13 +29,13 @@ function onSearch(e: KeyboardEvent): void {
     }
 }
 
-function toggleReadOnly(): void {
-    readOnly.value = !readOnly.value;
-    toast(readOnly.value ? 'Read-only mode on — writes are disabled' : 'Read-only mode off', readOnly.value ? 'eye' : 'check');
+async function toggleReadOnly(): Promise<void> {
+    const on = await config.toggleReadOnly();
+    toast(on ? 'Read-only mode on — writes are disabled' : 'Read-only mode off', on ? 'eye' : 'check');
 }
 
-function switchProject(): void {
-    toast('Project switcher — recent: config-studio · claude-plugins · rzem-web', 'repo');
+async function switchProject(): Promise<void> {
+    await config.pickProject();
 }
 </script>
 
@@ -37,8 +43,8 @@ function switchProject(): void {
     <header class="toolbar">
         <button class="proj-switch" title="Switch project" @click="switchProject">
             <span class="repo-dot"><Icon name="repo" :size="14" /></span>
-            <span>config-studio</span>
-            <span class="path">~/Projects/config-studio</span>
+            <span>{{ projectName }}</span>
+            <span class="path">{{ projectPath }}</span>
             <span class="chev"><Icon name="chevDown" :size="14" /></span>
         </button>
         <div class="tb-search">
@@ -49,7 +55,7 @@ function switchProject(): void {
         <div class="tb-spacer"></div>
         <div class="sync" title="File watcher heartbeat">
             <span class="pulse"></span>
-            Watching · synced 2s ago
+            {{ syncLabel }}
         </div>
         <button class="tb-toggle" :class="{ on: readOnly }" title="Read-only mode" @click="toggleReadOnly">
             <Icon name="eye" :size="14" />
