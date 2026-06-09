@@ -57,7 +57,7 @@ Delivery channel for the managed tier in this fixture: **file** (badge shows "En
   },
   "env": {
     "NODE_ENV": "development",
-    "NPM_TOKEN": "npm_4xK9fT2mQ8vLpR3sW7yB1nC5dH6jZ0aE"
+    "NPM_TOKEN": "npm_EXAMPLEFAKETOKEN0000000000000000"
   }
 }
 ```

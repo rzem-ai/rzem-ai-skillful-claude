@@ -100,7 +100,7 @@ describe('effective config (docs §B1 — scalars)', () => {
         const row = snap().dashboard.find((r) => r.key === 'env.NPM_TOKEN')!;
         expect(row.secret).toBe(true);
         expect(row.chain[0].value).toMatch(/npm_•+/);
-        expect(row.value).toBe('npm_4xK9fT2mQ8vLpR3sW7yB1nC5dH6jZ0aE');
+        expect(row.value).toBe('npm_EXAMPLEFAKETOKEN0000000000000000');
     });
 
     it('spinnerTipsEnabled falls back to default because its source is invalid JSON', () => {
