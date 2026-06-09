@@ -1,34 +1,21 @@
-import { createApp } from "vue";
-import { createPinia } from "pinia";
-import PrimeVue from "primevue/config";
-import Aura from "@primeuix/themes/aura";
-import { addCollection } from "@iconify/vue";
-import lucide from "@iconify-json/lucide/icons.json";
+import { createApp } from 'vue';
+import { createPinia } from 'pinia';
+import { config } from '@fortawesome/fontawesome-svg-core';
+import '@fortawesome/fontawesome-svg-core/styles.css';
 
-import App from "./App.vue";
-import { router } from "./router";
-import "./styles/main.css";
+import App from './App.vue';
+import { router } from './router';
+import { initTheme } from './composables/useTheme';
+import './styles/app.css';
 
-// Bundle the Lucide icon set so @iconify/vue resolves icons offline
-// instead of fetching from api.iconify.design at runtime — the
-// renderer's CSP (default-src 'self') blocks those requests.
-addCollection(lucide);
+// Ship Font Awesome's CSS via the bundler instead of letting the core inject it
+// at runtime — avoids a flash of unstyled (oversized) icons on first paint.
+config.autoAddCss = false;
 
-const app = createApp(App);
+// Apply persisted (or default dark) theme before mount so there's no flash.
+initTheme();
 
-app.use(createPinia());
-app.use(router);
-app.use(PrimeVue, {
-  theme: {
-    preset: Aura,
-    options: {
-      darkModeSelector: ".dark",
-      cssLayer: {
-        name: "primevue",
-        order: "theme, base, primevue",
-      },
-    },
-  },
-});
-
-app.mount("#app");
+createApp(App) //
+    .use(createPinia()) //
+    .use(router) //
+    .mount('#app');

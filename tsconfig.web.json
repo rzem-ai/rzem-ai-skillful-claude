@@ -24,7 +24,8 @@
     /* Path aliases */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@shared/*": ["electron/shared/*"]
     }
   },
   "include": [
@@ -32,6 +33,7 @@
     "src/**/*.d.ts",
     "src/**/*.tsx",
     "src/**/*.vue",
-    "electron/preload/api.d.ts"
+    "electron/preload/api.d.ts",
+    "electron/shared/**/*.ts"
   ]
 }

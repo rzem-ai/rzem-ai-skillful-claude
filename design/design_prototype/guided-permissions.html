@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guided · Permissions · Config Studio</title>
+<link rel="stylesheet" href="css/app.css" />
+<style>
+  .guided { max-width: 860px; }
+  .modes { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .mode {
+    text-align:left; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius);
+    background:var(--surface-1); cursor:pointer; position:relative;
+  }
+  .mode:hover{ border-color:var(--border-strong); }
+  .mode.on{ border-color:var(--accent); background:var(--accent-soft); }
+  .mode .mn{ font:12px var(--mono); font-weight:600; color:var(--fg); }
+  .mode .md{ font-size:11px; color:var(--fg-dim); margin-top:3px; }
+  .mode .cur{ position:absolute; top:8px; right:8px; font-size:9px; font-weight:700; text-transform:uppercase; color:var(--scope-project); background:color-mix(in oklab,var(--scope-project) 14%,transparent); padding:1px 5px; border-radius:4px; }
+  .composer { display:grid; grid-template-columns: 96px 86px 1fr auto; gap:8px; align-items:end; }
+  .syntax-help { position:relative; }
+  .help-pop { display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:30; width:300px; background:var(--surface-4); border:1px solid var(--border-strong); border-radius:var(--radius); box-shadow:var(--shadow-pop); padding:11px; font-size:11.5px; line-height:1.55; }
+  .syntax-help:hover .help-pop, .syntax-help:focus-within .help-pop { display:block; }
+  .help-pop code{ color:var(--accent); }
+  .help-pop .row{ justify-content:space-between; padding:2px 0; border-bottom:1px solid var(--border-soft); }
+  .help-pop .row:last-child{border-bottom:0;}
+  .rule-edit { display:grid; grid-template-columns: 18px 64px 1fr auto auto; align-items:center; gap:10px; padding:0 4px; height:34px; border-bottom:1px solid var(--border-soft); }
+  .rule-edit .spec{ font:12px var(--mono); color:var(--fg); }
+  .rule-edit .del{ color:var(--fg-faint); cursor:pointer; display:flex; } .rule-edit .del:hover{ color:var(--err); }
+  .rule-edit .drag{ color:var(--fg-faint); cursor:grab; display:flex; }
+  .applybar {
+    position:sticky; bottom:0; margin:18px -20px -28px; padding:12px 20px;
+    background:var(--surface-2); border-top:1px solid var(--border); display:flex; align-items:center; gap:12px;
+  }
+  .applybar .count{ font-size:12px; color:var(--fg-muted); }
+  .applybar .count b{ color:var(--fg); }
+  .applybar .spacer{ flex:1; }
+</style>
+</head>
+<body data-view="g-perm">
+<div class="app" id="app">
+  <header class="toolbar" id="tb"></header>
+  <nav class="sidebar" id="sb"></nav>
+  <main class="main" id="main">
+    <section class="view">
+      <div class="view-head">
+        <div class="col">
+          <span class="crumb">Guided Config &nbsp;›&nbsp; <b>Permissions</b></span>
+          <h1 style="margin-top:2px">Permissions</h1>
+        </div>
+        <div class="spacer"></div>
+        <a class="btn ghost sm" href="permissions.html">View merged result</a>
+      </div>
+      <div class="view-body">
+        <div class="guided">
+
+          <!-- Default mode -->
+          <div class="card mb">
+            <div class="card-h"><h3>Default permission mode</h3>
+              <span class="hint" style="margin-left:auto">Currently resolves to <code class="mono-v">acceptEdits</code> (Project)</span></div>
+            <div class="card-b">
+              <div class="modes" id="modes"></div>
+              <div style="margin-top:14px">
+                <label class="lbl">Apply this change to</label>
+                <div class="scope-sel" id="modeScope"></div>
+              </div>
+              <div id="modeEffect" style="margin-top:12px"></div>
+            </div>
+          </div>
+
+          <!-- Rule builder -->
+          <div class="card mb">
+            <div class="card-h"><h3>Permission rules</h3><span class="hint" style="margin-left:auto">drag to reorder within a group</span></div>
+            <div class="card-b">
+              <div id="ruleEditor"></div>
+              <hr class="hr"/>
+              <label class="lbl">Add a rule</label>
+              <div class="composer">
+                <div>
+                  <select class="field" id="cBeh">
+                    <option value="allow">allow</option><option value="ask">ask</option><option value="deny">deny</option>
+                  </select>
+                </div>
+                <div>
+                  <select class="field field-mono" id="cTool">
+                    <option>Bash</option><option>Read</option><option>Edit</option><option>Write</option><option>WebFetch</option>
+                  </select>
+                </div>
+                <div class="syntax-help">
+                  <input class="field field-mono" id="cSpec" placeholder="docker compose *" />
+                  <div class="help-pop">
+                    <b>Specifier syntax</b>
+                    <div class="row"><code>npm run *</code><span class="dim">prefix + wildcard</span></div>
+                    <div class="row"><code>./.env.*</code><span class="dim">relative path glob</span></div>
+                    <div class="row"><code>~/.ssh/**</code><span class="dim">recursive home glob</span></div>
+                    <div class="row"><code>(exact)</code><span class="dim">no wildcard = exact</span></div>
+                  </div>
+                </div>
+                <button class="btn" id="cAdd">'+ Add</button>
+              </div>
+              <div style="margin-top:12px">
+                <label class="lbl">Scope for new rule</label>
+                <div class="scope-sel" id="ruleScope"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Locked example -->
+          <div class="card mb">
+            <div class="card-h"><h3>Bypass-permissions mode</h3></div>
+            <div class="card-b">
+              <div class="locked">
+                <span class="lk-ico" id="lkico"></span>
+                <div>
+                  <div class="lk-val">disableBypassPermissionsMode = "disable"</div>
+                  <div class="lk-chan">Locked by managed policy · Enforced via file — /etc/claude-code/managed-settings.json. This control cannot be changed from this machine.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Apply bar -->
+          <div class="applybar">
+            <span class="count"><b id="pendN">0</b> pending changes</span>
+            <label class="chk on" id="showDiff"><input type="checkbox" checked />Preview diff before applying</label>
+            <div class="spacer"></div>
+            <button class="btn" id="discard">Discard</button>
+            <button class="btn primary" id="apply">Apply changes</button>
+          </div>
+
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Diff modal -->
+<div class="scrim" id="scrim" hidden>
+  <div class="modal">
+    <div class="modal-h"><span style="color:var(--accent)" id="diffIco"></span><h2>Review changes</h2>
+      <div class="spacer" style="flex:1"></div><button class="icon-btn" id="diffClose"></button></div>
+    <div class="modal-b" id="diffBody"></div>
+    <div class="modal-f">
+      <span class="hint">Atomic write · timestamped backup created (5 retained)</span>
+      <div style="flex:1"></div>
+      <button class="btn" id="diffCancel">Cancel</button>
+      <button class="btn primary" id="diffConfirm">Apply &amp; back up</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/shell.js"></script>
+<script>
+(function(){
+  var svg=Shell.svg, chip=Shell.chip;
+  document.getElementById('lkico').innerHTML=svg('lock',16);
+  document.getElementById('diffIco').innerHTML=svg('diff',16);
+  document.getElementById('diffClose').innerHTML=svg('xcircle',16);
+  document.getElementById('cAdd').innerHTML=svg('plus',13)+'Add';
+
+  var pending=[]; // {label}
+  function bump(){ document.getElementById('pendN').textContent=pending.length; document.getElementById('apply').disabled=pending.length===0; document.getElementById('discard').disabled=pending.length===0; }
+  bump();
+
+  // ---- modes ----
+  var MODES=[
+    {v:'plan',label:'plan',d:'Read-only planning'},
+    {v:'acceptEdits',label:'acceptEdits',d:'Auto-accept edits',cur:true},
+    {v:'auto',label:'auto',d:'Fully autonomous',userOnly:true},
+    {v:'bypassPermissions',label:'bypassPermissions',d:'Skip all prompts',locked:true}
+  ];
+  var curMode='acceptEdits';
+  var modesEl=document.getElementById('modes');
+  modesEl.innerHTML=MODES.map(function(m){
+    return '<button class="mode'+(m.v===curMode?' on':'')+'" data-v="'+m.v+'"'+(m.locked?' disabled title="Locked by managed policy"':'')+'>'+
+      (m.cur?'<span class="cur">live</span>':'')+'<div class="mn">'+m.label+'</div><div class="md">'+m.d+'</div></button>';
+  }).join('');
+
+  // ---- scope selectors ----
+  function buildScopeSel(el, opts){
+    // opts: {disableNonUser, why}
+    var OPTS=[
+      {v:'user',  t:'Just me (all projects)', s:'user',  d:'~/.claude/settings.json'},
+      {v:'project',t:'This project (shared with team)', s:'project', d:'.claude/settings.json · committed'},
+      {v:'local', t:'Just me, this project', s:'local', d:'.claude/settings.local.json · gitignored'}
+    ];
+    el.innerHTML=OPTS.map(function(o,i){
+      var dis = opts && opts.disableNonUser && o.v!=='user';
+      return '<button class="opt'+(i===(opts&&opts.disableNonUser?0:(el.dataset.def==='project'?1:0))?' on':'')+'" data-v="'+o.v+'"'+(dis?' aria-disabled="true"':'')+'>'+
+        '<div class="ttl">'+chip(o.s)+o.t+'</div><div class="desc">'+o.d+'</div>'+
+        (dis&&opts.why?'<div class="why">'+svg('alert',12)+opts.why+'</div>':'')+'</button>';
+    }).join('');
+    Array.prototype.forEach.call(el.querySelectorAll('.opt'),function(b){
+      b.addEventListener('click',function(){ if(b.getAttribute('aria-disabled')==='true') return;
+        Array.prototype.forEach.call(el.querySelectorAll('.opt'),function(x){x.classList.remove('on');}); b.classList.add('on'); });
+    });
+  }
+  var modeScope=document.getElementById('modeScope'); modeScope.dataset.def='project'; buildScopeSel(modeScope,{});
+  var ruleScope=document.getElementById('ruleScope'); ruleScope.dataset.def='project'; buildScopeSel(ruleScope,{});
+
+  function modeEffect(){
+    var el=document.getElementById('modeEffect');
+    var m=MODES.find(function(x){return x.v===curMode;});
+    if (m.userOnly){
+      buildScopeSel(modeScope,{disableNonUser:true, why:'auto can only be set in user settings'});
+      el.innerHTML='<div class="effect warn">'+svg('alert',14)+'<span><b>auto</b> mode is honoured only from <b>user</b> settings. Project / local placements are silently ignored (since v2.1.142).</span></div>';
+    } else if (curMode==='acceptEdits'){
+      buildScopeSel(modeScope,{}); el.innerHTML='<div class="effect info">'+svg('info',14)+'<span>No change — this is already the effective value (from Project settings).</span></div>';
+    } else {
+      buildScopeSel(modeScope,{}); el.innerHTML='<div class="effect info">'+svg('info',14)+'<span>This will override the current Project value <code>acceptEdits</code> for the selected scope.</span></div>';
+    }
+  }
+  modeEffect();
+  Array.prototype.forEach.call(modesEl.querySelectorAll('.mode'),function(b){
+    b.addEventListener('click',function(){ if(b.hasAttribute('disabled'))return;
+      Array.prototype.forEach.call(modesEl.querySelectorAll('.mode'),function(x){x.classList.remove('on');}); b.classList.add('on');
+      curMode=b.dataset.v; modeEffect();
+      if(curMode!=='acceptEdits'){ regPending('defaultMode', 'Set defaultMode = "'+curMode+'"'); } else { unreg('defaultMode'); }
+    });
+  });
+
+  // ---- existing rules (editable) ----
+  var RULES=[
+    {beh:'deny', spec:'Bash(curl *)', scope:'managed', locked:true},
+    {beh:'deny', spec:'Read(~/.ssh/**)', scope:'user'},
+    {beh:'deny', spec:'Read(./.env)', scope:'project'},
+    {beh:'ask',  spec:'Bash(git push *)', scope:'project'},
+    {beh:'allow',spec:'Bash(git diff *)', scope:'user'},
+    {beh:'allow',spec:'Bash(npm run *)', scope:'project'}
+  ];
+  function renderRules(){
+    document.getElementById('ruleEditor').innerHTML=RULES.map(function(r,i){
+      var del = r.locked ? '<span class="tag lock" title="Managed rule — read-only">'+svg('lock',10)+'managed</span>'
+              : '<span class="del" data-i="'+i+'" title="Remove">'+svg('trash',14)+'</span>';
+      var drag = r.locked ? '<span></span>' : '<span class="drag">'+svg('grip',14)+'</span>';
+      return '<div class="rule-edit">'+drag+'<span class="beh '+r.beh+'">'+r.beh+'</span><span class="spec">'+r.spec+'</span>'+chip(r.scope)+del+'</div>';
+    }).join('');
+    Array.prototype.forEach.call(document.querySelectorAll('.rule-edit .del'),function(d){
+      d.addEventListener('click',function(){ var i=+d.dataset.i; var r=RULES[i]; RULES.splice(i,1); renderRules(); regPending('del'+r.spec,'Remove '+r.beh+' '+r.spec); });
+    });
+  }
+  renderRules();
+
+  document.getElementById('cAdd').addEventListener('click',function(){
+    var beh=document.getElementById('cBeh').value, tool=document.getElementById('cTool').value, spec=document.getElementById('cSpec').value.trim();
+    if(!spec){ Shell.toast('Enter a specifier first','alert'); return; }
+    var scopeBtn=ruleScope.querySelector('.opt.on'); var scope=scopeBtn?scopeBtn.dataset.v:'project';
+    var full=tool+'('+spec+')';
+    RULES.push({beh:beh, spec:full, scope:scope}); renderRules();
+    regPending('add'+full,'Add '+beh+' '+full+' ('+Shell.SCOPES[scope].label+')');
+    document.getElementById('cSpec').value='';
+  });
+
+  function regPending(id,label){ if(!pending.find(function(p){return p.id===id;})) pending.push({id:id,label:label}); bump(); }
+  function unreg(id){ pending=pending.filter(function(p){return p.id!==id;}); bump(); }
+
+  document.getElementById('discard').addEventListener('click',function(){ pending=[]; bump(); Shell.toast('Pending changes discarded','check'); });
+
+  // ---- diff modal ----
+  function buildDiff(){
+    var fileLines = pending.slice(0,4).map(function(p){
+      var add = p.label.indexOf('Remove')<0;
+      return '<div class="ln '+(add?'add':'del')+'"><span class="gut">'+(add?'+':'-')+'</span><span class="txt">'+
+        (add? '    "'+(p.label.indexOf('defaultMode')>=0?'defaultMode": "'+curMode+'"':(p.label.replace(/^(Add|Remove) (allow|ask|deny) /,'').replace(/ \(.+\)$/,'')+'')) +'"'
+            : '    (removed) '+p.label.replace('Remove ',''))+'</span></div>';
+    }).join('');
+    var effLines = pending.map(function(p){
+      var add=p.label.indexOf('Remove')<0;
+      return '<div class="ln '+(add?'add':'del')+'"><span class="gut">'+(add?'+':'-')+'</span><span class="txt">'+p.label+'</span></div>';
+    }).join('');
+    return '<div class="diff-block"><div class="diff-h">'+svg('file',13)+'File diff · .claude/settings.json</div>'+
+        '<div class="diff"><div class="ln"><span class="gut">…</span><span class="txt">  "permissions": {</span></div>'+fileLines+
+        '<div class="ln"><span class="gut">…</span><span class="txt">  }</span></div></div></div>'+
+      '<div class="diff-block thesis"><div class="diff-h">'+svg('arrow',13)+'What actually changes · effective configuration</div>'+
+        '<div class="diff thesis">'+effLines+'</div>'+
+        '<div class="hint" style="margin-top:7px">'+svg('info',12)+' This is the resolved result after merge — what the agent will actually see.</div></div>';
+  }
+  function openDiff(){ document.getElementById('diffBody').innerHTML=buildDiff(); document.getElementById('scrim').hidden=false; }
+  function closeDiff(){ document.getElementById('scrim').hidden=true; }
+  document.getElementById('apply').addEventListener('click',function(){
+    if(pending.length===0) return;
+    if(document.getElementById('showDiff').querySelector('input').checked) openDiff(); else commit();
+  });
+  document.getElementById('diffClose').addEventListener('click',closeDiff);
+  document.getElementById('diffCancel').addEventListener('click',closeDiff);
+  document.getElementById('diffConfirm').addEventListener('click',function(){ closeDiff(); commit(); });
+  document.getElementById('showDiff').addEventListener('change',function(){ this.classList.toggle('on',this.querySelector('input').checked); });
+  function commit(){ var n=pending.length; pending=[]; bump(); Shell.toast(n+' change'+(n>1?'s':'')+' written · backup created','check','Undo',function(){ Shell.toast('Restored from backup','check'); }); }
+})();
+</script>
+</body>
+</html>

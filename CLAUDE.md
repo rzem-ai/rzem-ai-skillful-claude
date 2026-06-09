@@ -2,71 +2,111 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What this app is
+## What this is
 
-Skillful Claude is an Electron 33 + Vue 3 desktop app for managing `CLAUDE.md` and `SKILL.md` files across a developer's projects and global Claude config. The dashboard renders their relationships as a Vue Flow graph; the main process reads/writes the files and shells out to the bundled `vercel-labs/skills` CLI.
+**Skillful Claude** is an Electron 33 + Vue 3 desktop app for Claude Code power
+users. It answers one question — *"what configuration is actually in effect, and
+why?"* — across the five config scopes (Managed › CLI › Local › Project › User)
+and offers guided forms plus a raw editor to change it. Dark-first, dense,
+developer-tool aesthetic (Linear/Tower/TablePlus, not a SaaS dashboard).
 
-See `README.md` for build, run, and release commands. Automated checks are `npm run typecheck` (vue-tsc on the renderer plus tsc on the main/e2e TS projects) and `npm run e2e` (Playwright driving the built Electron bundle via `_electron`, config in `playwright.config.ts`). There's no unit-test runner or linter wired up. E2E specs live under `e2e/` (`smoke`, `sidebar`, `claude-md-empty-state`).
+The UI was implemented from the design handoff in `design/design_prototype/`
+(its `DESIGN-HANDOFF.md` is the visual contract). The **config engine is now
+wired**: the main process reads real Claude Code config from disk, resolves it,
+and pushes a typed `Snapshot` to the renderer over the preload bridge. Every
+screen renders live data through a Pinia store (`src/stores/config.ts`); the
+inline fixtures are gone. Guided Permissions and the Raw Editor perform real
+writes (atomic write + timestamped backups). With no project selected, only
+user/managed/global scopes resolve and screens fall back to empty states.
+
+See `README.md` for build/run commands. Automated checks: `npm run typecheck`
+(vue-tsc on the renderer + tsc on the main/preload project) and `npm test`
+(Vitest over the engine, asserting the documented fixture ground-truth in
+`docs/fixtures.md` plus a live-host smoke test). No linter or e2e suite.
 
 ## Architecture
 
 ### Three processes, one IPC seam
 
-This is a standard Electron app split into three processes, each built as a separate bundle by `electron-vite`:
+`electron-vite` builds three bundles, one per process:
 
-- **Main (`electron/main/`)** — Node.js. Owns the BrowserWindow, the filesystem, the auto-updater, and the spawned `vercel-labs/skills` CLI. Entry: `electron/main/index.ts`. Modules:
-  - `fs.ts` — port of the old Rust file commands. Scans workspaces for `CLAUDE.md` / `SKILL.md`, parses YAML frontmatter via `gray-matter`, hashes content with Node `crypto`.
-  - `config.ts` — port of the global config loader. Walks `~/.claude.json`, `~/.claude/{settings.json,CLAUDE.md,skills/**}`, and per-project files.
-  - `skills-cli.ts` — wraps the bundled `skills` npm package as a child process. Both one-shot (`runSkillsCli`) and streaming (`startSkillsCli` → chunk events) variants.
-  - `updater.ts` — `electron-updater` wired to GitHub Releases. No-ops in dev.
-  - `ipc.ts` — registers every `ipcMain.handle(...)` channel. Single source of truth for the IPC surface.
-- **Preload (`electron/preload/`)** — sandboxed bridge. Uses `contextBridge.exposeInMainWorld("api", api)` to expose typed wrappers around each IPC channel. The renderer sees `window.api.fs.scanWorkspace(...)`, `window.api.skills.exec(...)`, etc. Type declarations live in `electron/preload/api.d.ts`.
-- **Renderer (`src/`)** — the Vue 3 app. Unchanged from the Tauri version except that the IPC composable is now `src/composables/useDesktopApi.ts` (forwarding to `window.api.*`) instead of the old `useTauriFs.ts` (which called `invoke()`).
+- **Main (`electron/main/index.ts`)** — Node.js. Creates the BrowserWindow,
+  loads the renderer, and calls `registerIpc(win)` (`electron/main/ipc.ts`),
+  which wires the config engine + write pipeline to the renderer and starts the
+  file watchers. The engine itself lives in `electron/main/engine/` (pure,
+  Electron-free, Vitest-tested) and the write pipeline in
+  `electron/main/writing/`.
+- **Preload (`electron/preload/index.ts`)** — sandboxed `contextBridge` exposing
+  `window.api`: thin `ipcRenderer.invoke` wrappers over the channels in
+  `electron/shared/contract.ts` (`CH`), plus an `onChange` push subscription.
+  Keep it, `api.d.ts`, and `ipc.ts` in lockstep with the contract.
+- **Renderer (`src/`)** — the Vue 3 app (see below).
 
-The IPC surface is `<namespace>:<verb>` (`fs:scanWorkspace`, `config:load`, `skills:run`, `skills:exec`, `skills:cancel`, `updater:check`, etc.). **When adding a command, update all three layers**: the main-side handler (`electron/main/`), the preload bridge (`electron/preload/index.ts` + `api.d.ts`), and the renderer composable (`src/composables/useDesktopApi.ts`). They're coupled by design — the bridge is the only seam.
+The IPC contract (`electron/shared/contract.ts`, alias `@shared`) is imported by
+all three processes and is the single source of truth for the view-model shapes.
+When adding a backend command, update the contract, the main handler, the
+preload wrapper, and `api.d.ts` together.
 
-### File classification is centralized
+### Renderer structure (`src/`)
 
-`electron/main/fs.ts` is the heart of the backend. Every read/write command starts by calling `classify(path)`, which only accepts files literally named `CLAUDE.md` or `SKILL.md`. Anything else throws `AppError("UnsupportedFile", path)`. If you add a new managed file type (e.g. `settings.json`), extend the `WorkspaceEntryKind` union, `classify()`, and the scanner's filter together — they're coupled by design so the app can't accidentally write to arbitrary paths.
+- **`styles/app.css`** — the complete design system, the source of truth for
+  visual style. Defines all tokens as CSS custom properties: neutral surfaces
+  (`--bg`, `--surface-1..4`), text (`--fg`, `--fg-muted`, `--fg-dim`), the app
+  accent (`--accent`, teal — chrome only), the five reserved **scope colors**
+  (`--scope-managed|cli|local|project|user`), semantic state colors, type scale
+  (`--t-cap|body|sec|view`), geometry, and layout dims. Light theme overrides
+  live under `:root[data-theme="light"]`. **Style new components with these
+  tokens and the existing classes — not hex literals, Tailwind, or PrimeVue.**
+- **`lib/icons.ts`** — the inline-SVG path set; **`components/Icon.vue`** renders
+  `<Icon name="grid" :size="16" />`.
+- **`lib/scopes.ts`** + **`components/ProvenanceChip.vue`** — the signature
+  component: scope color + icon + label, with an optional hover card.
+- **`composables/useTheme.ts`** — `data-theme` on `<html>`, persisted to
+  localStorage (`sc:theme`); `initTheme()` runs once at boot in `main.ts`.
+- **`composables/useToast.ts`** + **`components/ToastHost.vue`** — global toast
+  queue rendered once in `App.vue`.
+- **`components/AppToolbar.vue`**, **`AppSidebar.vue`**, **`layouts/AppShell.vue`**
+  — the shell chrome. `AppShell` is the `.app` CSS grid; it expects exactly
+  three children (`.toolbar`, `.sidebar`, and the view's `.main`), so **every
+  shell view's root element must be `<main class="main">`** (toggle
+  `:class="{ 'show-inspector': open }"` when the view has an inspector aside).
+- **`stores/config.ts`** — the one Pinia store over the engine. Loads the
+  `Snapshot` via `window.api.snapshot()`, re-loads on `onChange` watcher pushes,
+  and exposes per-workspace getters plus the write actions (`applyChange`,
+  `saveFile`, `previewChange`, `pickProject`, `toggleReadOnly`). `App.vue` calls
+  `init()` once at boot.
+- **`views/`** — one component per screen: `DashboardView`, `ScopeStackView`,
+  `PermissionsView`, `McpMapView`, `MemoryMapView`, `ExtensionsView`,
+  `GuidedPermissionsView`, `RawEditorView` (`OverviewView` exists but is
+  unrouted). Each pulls its data from the store and keeps screen-local
+  presentation logic + `<style scoped>`. Screen-local view-model types come from
+  `@shared/contract`.
 
-`scanWorkspace` is depth-limited (`MAX_SCAN_DEPTH = 8`) and skips `node_modules`, `.git`, `target`, `dist`, `.next`, `.venv`. This is intentional protection against the user accidentally pointing it at `/` or a huge monorepo — preserve those guards. Implemented as a manual recursive walk (not `fs.readdir { recursive: true }`) so we can prune skipped directories *before* recursing into them.
+### Routing (`src/router/index.ts`)
 
-### vercel-labs/skills integration
-
-The `skills` package (currently `^1.4.9`) is shipped as a runtime dependency. We never call its internals — we spawn the CLI binary as a child process via `spawn(process.execPath, [entry, ...args], { env: { ELECTRON_RUN_AS_NODE: "1" } })`, which uses Electron's bundled Node interpreter so we don't depend on `node`/`npx` being on the user's PATH.
-
-In packaged builds, `skills` lives in `app.asar.unpacked/node_modules/skills` (see `electron-builder.yml` → `asarUnpack`), because asar-archived files can't be executed directly. `skills-cli.ts` falls back to that path when `require.resolve` can't find it.
-
-The streaming variant (`startSkillsCli`) returns a `jobId` and pipes stdout/stderr chunks back via `webContents.send("skills:chunk", ...)` so the **PrimeVue Terminal view** (`src/views/SkillsTerminalView.vue`) can render output live as the CLI runs. The view tracks the active jobId and forwards each chunk into `TerminalService.emit("response", line)` after stripping ANSI escapes.
-
-### Auto-update
-
-`electron-updater` is configured to read from GitHub Releases (provider: `github`, owner: `rzem-ai`, repo: `rzem-ai-skillful-claude` — see `electron-builder.yml` → `publish`). In development the updater is a no-op because `app.isPackaged` is false. The renderer can call `window.api.updater.check()` and listen on `window.api.updater.onStatus(...)` for progress events. See `README.md` for the release-publishing steps.
-
-### Frontend state model
-
-A single Pinia store (`src/stores/workspace.ts`) holds the currently scanned workspace: `scope` (workspace vs global), `root`, `entries`, plus loading/error. A second store (`src/stores/config.ts`) holds the loaded `~/.claude.json` tree. Views subscribe to both stores; they don't call IPC themselves — everything goes through `useDesktopApi.ts` so the boundary stays in one place.
-
-Routes are sidebar-driven: each route in `src/router/index.ts` carries a `meta.sidebar` key the `SideBar` component reads to highlight the active section. Adding a top-level page = new route + matching sidebar entry.
-
-### Canvas (`DashboardView`)
-
-The graph uses Vue Flow with two custom node types (`ClaudeMdNode`, `SkillNode`) registered via `markRaw` — Vue Flow requires non-reactive node type maps. Nodes and edges are derived from the loaded `useConfigStore`: a single `root` node for the global `~/.claude/CLAUDE.md`, one column per live project that has either a `CLAUDE.md` or local skills, and skill nodes stacked beneath each column. Edges connect root → global skills and root → project CLAUDE.md → project skills (or root → skill directly when a project has skills but no `CLAUDE.md`). The layout is index-driven for now; a dagre auto-layout is a follow-up. Node `id`s are stable composite strings (`skill-g-${path}`, `project-${path}`, etc.) so they survive adds/removes without reordering.
-
-### Design tokens
-
-Tailwind v4 reads color tokens (`--color-page`, `--color-claude`, `--color-skill`, etc.) from `@theme` in `src/styles/main.css`, so utilities like `bg-page`, `text-strong`, `border-line` work without a `tailwind.config.js`. The palette is lifted from `design/skillful-claude-ui.pen` — keep new components on these tokens rather than hex literals so dark mode and theme changes stay consistent.
-
-### Icons
-
-The full platform-specific icon set under `build/` is generated from a single SVG source at `design/icon-source.svg` by `scripts/build-icons.mjs` (runnable as `npm run icons`). The script uses `sharp` to render the SVG to a 1024×1024 PNG and `electron-icon-builder` to emit `build/icon.icns`, `build/icon.ico`, and `build/icons/<size>x<size>.png` for Linux. The current SVG is a brand-orange squircle with a sparkle glyph as a placeholder — drop a real vector source in at the same path and re-run `npm run icons` to ship polished artwork.
+Hash history (`createWebHashHistory`) — packaged Electron loads the renderer
+over `file://`, where HTML5 history breaks. Every screen renders inside
+`AppShell` via a **layout route**: a parent at `/` whose children use absolute
+paths (`/dashboard`, `/permissions`, …); the empty-path index child redirects to
+`/dashboard`. Each child sets `meta.navId`, which `AppSidebar` reads to
+highlight the active item.
 
 ## Things to know
 
-- **ESM all the way**: `package.json` has `"type": "module"`. The main process is ESM, so `__dirname` doesn't exist — derive it via `dirname(fileURLToPath(import.meta.url))` (already done in `electron/main/index.ts`).
-- **Sandbox is off**: ESM preloads require `sandbox: false` on the BrowserWindow. The renderer is still safely walled off via `contextIsolation: true` + `nodeIntegration: false` — the only way for renderer code to reach Node is through the preload bridge.
-- **Updater publish target is real**: `electron-builder.yml` points at `rzem-ai/rzem-ai-skillful-claude` on GitHub. Don't run `npm run release` from a fork or you'll publish to the wrong repo.
-- **`asarUnpack` matters**: the `skills` CLI must remain in `asarUnpack` or `child_process.spawn` can't execute it inside a packaged app.
-- **Updates panel**: Settings → Updates surfaces `window.api.updater.{check,onStatus,quitAndInstall}`. It shows the running version (from `app.getVersion()`), the live download progress, and an "Install & restart" button that becomes visible once an update has been downloaded. In dev the buttons render but the underlying calls no-op because `app.isPackaged` is false; the panel makes that explicit with an inline notice.
-- Per-user Claude Code settings live in `.claude/` and are gitignored — don't commit anything there.
-- `electron-log` writes main-process logs to the standard per-OS path under `app.getPath("userData")`. Useful for debugging "why didn't the updater fire" in a packaged build.
+- **ESM all the way**: `package.json` has `"type": "module"`. Derive `__dirname`
+  via `dirname(fileURLToPath(import.meta.url))` in the main process.
+- **Sandbox is off**: ESM preloads require `sandbox: false`; the renderer is
+  still walled off via `contextIsolation: true` + `nodeIntegration: false`.
+- **Tailwind & PrimeVue are installed but unused** by these screens — the
+  prototype ships its own design system in `app.css`. Don't reach for them when
+  building Config screens; stay on the `app.css` tokens/classes.
+- **Real data via the engine**: every value on screen comes from the live
+  `Snapshot` through the Pinia store. The engine (`electron/main/engine/`) is
+  pure logic with exhaustive Vitest coverage against `docs/fixtures.md` — change
+  resolution behaviour there and assert it in `engine.test.ts`, not in the views.
+- **Writes are guarded**: all writes go through `electron/main/writing/` (atomic
+  temp+rename, 5-deep backups) and the write-target resolver, which refuses
+  managed scopes and the auto-mode-in-non-user case. Read-only mode blocks them.
+- **Updater publish target is real**: `electron-builder.yml` points at
+  `rzem-ai/rzem-ai-skillful-claude`. Don't run `npm run release` from a fork.
+- Per-user Claude Code settings live in `.claude/` and are gitignored.

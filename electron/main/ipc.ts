@@ -1,116 +1,78 @@
-import { ipcMain, dialog, app, BrowserWindow } from "electron";
-import log from "electron-log/main.js";
+// IPC seam. Registers every channel the renderer calls, backed by the config
+// engine and the write pipeline, and pushes live snapshots when watched files
+// change. Keep this list in lockstep with electron/shared/contract.ts (CH) and
+// the preload bridge.
 
-import {
-  scanWorkspace,
-  readClaudeMd,
-  writeClaudeMd,
-  readSkill,
-  writeSkill,
-} from "./fs";
-import { loadClaudeConfig } from "./config";
-import {
-  runSkillsCli,
-  startSkillsCli,
-  cancelSkillsJob,
-} from "./skills-cli";
-import { checkForUpdatesNow, quitAndInstall } from "./updater";
+import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { CH, type ChangeOp, type SaveFileRequest, type Snapshot } from '../shared/contract.js';
+import { buildSnapshot } from './engine/index.js';
+import { liveEnv } from './engine/env.js';
+import { applyChange, previewChange, saveFile } from './writing/apply.js';
+import { currentProject, initProjectContext, recents, setProject } from './projectContext.js';
+import { ConfigWatcher } from './watch.js';
 
-/**
- * Single source of truth for the renderer↔main IPC surface.
- *
- * Channel naming convention: `<namespace>:<verb>` (e.g. `fs:scanWorkspace`).
- * The preload (electron/preload/index.ts) exposes a typed wrapper around
- * each channel as `window.api.*`. The renderer composable
- * (`src/composables/useDesktopApi.ts`) then re-exports those wrappers
- * with the same shapes the old Tauri code used, so view code is
- * unchanged downstream.
- *
- * Streaming events go the other way: main → renderer via
- * `webContents.send`. Channels: `skills:chunk` and `skills:exit` for
- * the live terminal, `updater:status` for auto-update progress.
- */
-export function registerIpcHandlers(): void {
-  // ── fs / config ────────────────────────────────────────────────────────
-  ipcMain.handle("fs:scanWorkspace", async (_e, root: string) =>
-    scanWorkspace(root),
-  );
-  ipcMain.handle("fs:readClaudeMd", async (_e, path: string) =>
-    readClaudeMd(path),
-  );
-  ipcMain.handle("fs:writeClaudeMd", async (_e, path: string, body: string) =>
-    writeClaudeMd(path, body),
-  );
-  ipcMain.handle("fs:readSkill", async (_e, path: string) => readSkill(path));
-  ipcMain.handle("fs:writeSkill", async (_e, path: string, raw: string) =>
-    writeSkill(path, raw),
-  );
-  ipcMain.handle("config:load", async () => loadClaudeConfig());
+let readOnly = false;
+let watcher: ConfigWatcher | null = null;
+let handlersRegistered = false;
 
-  // ── dialog (replaces tauri-plugin-dialog) ──────────────────────────────
-  ipcMain.handle("dialog:openDirectory", async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) return null;
-    const result = await dialog.showOpenDialog(win, {
-      properties: ["openDirectory"],
+function snapshot(): Snapshot {
+    const env = liveEnv(currentProject());
+    return buildSnapshot(env, recents(), detectClaudeVersion());
+}
+
+function detectClaudeVersion(): string {
+    return process.env.CLAUDE_CODE_VERSION || 'Claude Code 2.1.x';
+}
+
+function restartWatcher(win: BrowserWindow): void {
+    watcher?.stop();
+    const env = liveEnv(currentProject());
+    watcher = new ConfigWatcher(env, (reason) => {
+        if (!win.isDestroyed()) win.webContents.send(CH.onChange, { reason });
     });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
-  });
+    watcher.start();
+}
 
-  // ── skills CLI: one-shot ──────────────────────────────────────────────
-  // Used by view code that just wants the final stdout/stderr (e.g. for
-  // populating a list of installed skills).
-  ipcMain.handle(
-    "skills:run",
-    async (_e, args: string[], opts?: { cwd?: string; env?: Record<string, string> }) =>
-      runSkillsCli(args, opts ?? {}),
-  );
+export function registerIpc(win: BrowserWindow): void {
+    initProjectContext();
+    restartWatcher(win);
 
-  // ── skills CLI: streaming ──────────────────────────────────────────────
-  // The PrimeVue Terminal view starts a job, gets a jobId, and listens for
-  // `skills:chunk` / `skills:exit` events. We forward each chunk via
-  // webContents.send so it shows up live in the UI.
-  ipcMain.handle(
-    "skills:exec",
-    async (
-      event,
-      args: string[],
-      opts?: { cwd?: string; env?: Record<string, string> },
-    ) => {
-      const sender = event.sender;
-      const jobId = startSkillsCli(
-        args,
-        opts ?? {},
-        (chunk) => {
-          if (!sender.isDestroyed()) sender.send("skills:chunk", chunk);
-        },
-        (exit) => {
-          if (!sender.isDestroyed()) sender.send("skills:exit", exit);
-        },
-      );
-      return jobId;
-    },
-  );
+    // Handlers are global to ipcMain; only attach them once even though a new
+    // window (and watcher) may be created on macOS "activate".
+    if (handlersRegistered) return;
+    handlersRegistered = true;
 
-  ipcMain.handle("skills:cancel", async (_e, jobId: string) =>
-    cancelSkillsJob(jobId),
-  );
+    ipcMain.handle(CH.snapshot, () => snapshot());
 
-  // ── app meta (version + packaged state for the Updates panel) ─────────
-  ipcMain.handle("app:meta", async () => ({
-    version: app.getVersion(),
-    name: app.getName(),
-    isPackaged: app.isPackaged,
-    platform: process.platform,
-    arch: process.arch,
-  }));
+    ipcMain.handle(CH.setProject, (_e, path: string | null) => {
+        setProject(path);
+        restartWatcher(win);
+        return snapshot();
+    });
 
-  // ── updater ────────────────────────────────────────────────────────────
-  ipcMain.handle("updater:check", async () => checkForUpdatesNow());
-  ipcMain.handle("updater:quitAndInstall", async () => {
-    quitAndInstall();
-  });
+    ipcMain.handle(CH.pickProject, async () => {
+        const res = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Choose a project folder' });
+        if (res.canceled || !res.filePaths[0]) return snapshot();
+        setProject(res.filePaths[0]);
+        restartWatcher(win);
+        return snapshot();
+    });
 
-  log.info("ipc: handlers registered");
+    ipcMain.handle(CH.setReadOnly, (_e, value: boolean) => {
+        readOnly = value;
+        return readOnly;
+    });
+
+    ipcMain.handle(CH.previewChange, (_e, op: ChangeOp) => previewChange(op, liveEnv(currentProject())));
+
+    ipcMain.handle(CH.applyChange, (_e, op: ChangeOp) => applyChange(op, liveEnv(currentProject()), readOnly));
+
+    ipcMain.handle(CH.saveFile, (_e, req: SaveFileRequest) => saveFile(req.realPath, req.content, readOnly));
+
+    ipcMain.handle(CH.revealSecret, (_e, _key: string) => ({ ok: true }));
+}
+
+export function disposeIpc(): void {
+    watcher?.stop();
+    watcher = null;
 }
