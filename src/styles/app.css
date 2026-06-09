@@ -32,38 +32,38 @@
 
   /* App chrome accent — deliberately a teal/cyan, NOT any scope color.
      Used only for focus rings, active nav, primary actions. */
-  --accent: #29b6c9;
+  --accent: #2B7FFF;
   --accent-fg: #06181b;
   --accent-soft: rgba(41, 182, 201, 0.14);
 
   /* Scope colors — the heart of the app. Reserved; never reused for chrome. */
-  --scope-managed: #e5484d;
+  --scope-managed: #FB2C36;
   /* crimson  — lock */
-  --scope-cli: #f5a623;
+  --scope-cli: #FE9A00;
   /* amber    — terminal */
-  --scope-local: #8e6ff7;
+  --scope-local: #8E51FF;
   /* violet   — laptop */
-  --scope-project: #4c8dff;
+  --scope-project: #2B7FFF;
   /* blue     — folder/repo */
-  --scope-user: #3dd68c;
+  --scope-user: #00BC7D;
   /* green    — person */
 
   /* Semantic state — expressed as tint+icon to avoid scope-color collision */
-  --ok: #3dd68c;
+  --ok: #00BC7D;
   --ok-bg: rgba(61, 214, 140, 0.12);
-  --warn: #f5a623;
+  --warn: #FE9A00;
   --warn-bg: rgba(245, 166, 35, 0.13);
-  --err: #e5484d;
+  --err: #FB2C36;
   --err-bg: rgba(229, 72, 77, 0.13);
-  --info: #4c8dff;
+  --info: #2B7FFF;
   --info-bg: rgba(76, 141, 255, 0.12);
   --inert: #6c737c;
   --inert-bg: rgba(108, 115, 124, 0.12);
 
   /* Behaviour badges (permissions) */
-  --deny: #e5484d;
-  --ask: #f5a623;
-  --allow: #3dd68c;
+  --deny: #FB2C36;
+  --ask: #FE9A00;
+  --allow: #00BC7D;
 
   /* Type */
   --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
@@ -108,27 +108,27 @@
   --fg-muted: #5b626b;
   --fg-dim: #868d96;
   --fg-faint: #aeb4bc;
-  --accent: #0e8d9d;
+  --accent: #2B7FFF;
   --accent-fg: #ffffff;
   --accent-soft: rgba(14, 141, 157, 0.12);
-  --scope-managed: #cf2c31;
+  --scope-managed: #FB2C36;
   --scope-cli: #c87d0b;
   --scope-local: #6c45e6;
-  --scope-project: #2f6fe0;
-  --scope-user: #1aa86a;
-  --ok: #13a866;
+  --scope-project: #2B7FFF;
+  --scope-user: #00BC7D;
+  --ok: #00BC7D;
   --warn: #b9760a;
-  --err: #cf2c31;
-  --info: #2f6fe0;
+  --err: #FB2C36;
+  --info: #2B7FFF;
   --inert: #7a818a;
   --ok-bg: rgba(19, 168, 102, .12);
   --warn-bg: rgba(185, 118, 10, .12);
   --err-bg: rgba(207, 44, 49, .1);
   --info-bg: rgba(47, 111, 224, .1);
   --inert-bg: rgba(122, 129, 138, .12);
-  --deny: #cf2c31;
+  --deny: #FB2C36;
   --ask: #b9760a;
-  --allow: #13a866;
+  --allow: #00BC7D;
   --shadow-pop: 0 12px 32px rgba(20, 22, 28, 0.16);
 }
 
@@ -231,7 +231,7 @@ code,
 }
 
 .toolbar .traffic i:nth-child(1) {
-  background: #f5605b;
+  background: #FB2C36;
 }
 
 .toolbar .traffic i:nth-child(2) {
@@ -239,7 +239,7 @@ code,
 }
 
 .toolbar .traffic i:nth-child(3) {
-  background: #62c554;
+  background: #00BC7D;
 }
 
 .toolbar>* {
