@@ -1,50 +1,27 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import Icon from '@/components/Icon.vue';
 import ProvenanceChip from '@/components/ProvenanceChip.vue';
 import { toast } from '@/composables/useToast';
-import type { ScopeId } from '@/lib/scopes';
+import { useConfigStore } from '@/stores/config';
 
-// ── Fixture: every CLAUDE.md loaded for this project, in load order ──
-interface MemFile {
-    scope: ScopeId;
-    path: string;
-    sub: string;
-    ord?: number;
-    lazy?: boolean;
-    committed?: boolean;
-    gitignore?: boolean;
-}
-
-const FILES: MemFile[] = [
-    { ord: 1, scope: 'user', path: '~/.claude/CLAUDE.md', sub: '14 lines · personal memory · loads always' },
-    { ord: 2, scope: 'project', path: '~/Projects/config-studio/CLAUDE.md', sub: 'imports 2 files · loads always', committed: true },
-    { ord: 3, scope: 'local', path: 'CLAUDE.local.md', sub: 'machine-local notes', gitignore: true },
-    { lazy: true, scope: 'project', path: 'engine/CLAUDE.md', sub: 'loads only when Claude reads files under engine/' },
-];
-
-// ── Fixture: @import graph rooted at the project CLAUDE.md ──
-interface ImportNode {
-    id: string;
-    path: string;
-    depth: number;
-    broken: boolean;
-}
-
-const IMPORTS: ImportNode[] = [
-    { id: 'git-workflow', path: 'docs/git-workflow.md', depth: 1, broken: false },
-    { id: 'style-guide', path: 'docs/style-guide.md', depth: 1, broken: true },
-];
-
-const MAX_DEPTH = 5;
-const MAX_REACHED = 1;
+// The memory map — load order, import graph, and auto-memory — comes live from
+// the engine.
+const config = useConfigStore();
+const memory = computed(() => config.memory);
+const FILES = computed(() => memory.value?.files ?? []);
+const IMPORTS = computed(() => memory.value?.imports ?? []);
+const MAX_DEPTH = computed(() => memory.value?.maxDepth ?? 5);
+const MAX_REACHED = computed(() => memory.value?.maxReached ?? 0);
+const auto = computed(() => memory.value?.auto ?? null);
+const brokenCount = computed(() => memory.value?.brokenCount ?? 0);
 
 // ── Reactive interaction state ──
 const hovered = ref<string | null>(null);
 const flagged = ref<string | null>(null);
 
 function highlightBroken(): void {
-    const broken = IMPORTS.find((i) => i.broken);
+    const broken = IMPORTS.value.find((i) => i.broken);
     if (!broken) return;
     flagged.value = broken.id;
     toast('Highlighted the broken import in the graph', 'alert');
@@ -65,11 +42,12 @@ function clearFlag(): void {
                 </div>
             </div>
             <div class="view-body">
-                <div class="banner warn">
+                <div v-if="brokenCount" class="banner warn">
                     <span class="b-ico"><Icon name="alert" :size="16" /></span>
                     <div>
-                        <b>1 broken import.</b>
-                        <code class="mono-v">CLAUDE.md → docs/style-guide.md</code>
+                        <b>{{ brokenCount }} broken import{{ brokenCount > 1 ? 's' : '' }}.</b>
+                        An
+                        <code class="mono-v">@import</code>
                         points to a file that doesn&rsquo;t exist.
                     </div>
                     <span class="b-act" @click="highlightBroken">Locate in graph</span>
@@ -142,33 +120,34 @@ function clearFlag(): void {
                         <div class="card auto-card">
                             <div class="card-h">
                                 <h3>Auto memory</h3>
-                                <span class="tag ok" style="margin-left: auto">
-                                    <Icon name="check" :size="10" />
-                                    enabled
+                                <span class="tag" :class="auto?.enabled ? 'ok' : 'inert'" style="margin-left: auto">
+                                    <Icon :name="auto?.enabled ? 'check' : 'info'" :size="10" />
+                                    {{ auto?.enabled ? 'enabled' : 'disabled' }}
                                 </span>
                             </div>
-                            <div class="card-b">
+                            <div v-if="auto" class="card-b">
                                 <div class="ac-row">
                                     <span class="dim">Entries</span>
-                                    <span class="mono-v">6</span>
+                                    <span class="mono-v">{{ auto.entries }}</span>
                                 </div>
                                 <div class="ac-row">
                                     <span class="dim">Directory</span>
-                                    <span class="mono-v" style="font-size: 10.5px">~/.claude/projects/-home-alex-…/memory/</span>
+                                    <span class="mono-v" style="font-size: 10.5px">{{ auto.directory || '—' }}</span>
                                 </div>
                                 <div class="ac-row">
                                     <span class="dim">Index</span>
-                                    <span class="mono-v">MEMORY.md</span>
+                                    <span class="mono-v">{{ auto.index }}</span>
                                 </div>
-                                <div class="mempreview">
-                                    # Project Memory
-                                    <br />
-                                    - [Engine purity](engine.md) — no UI imports in engine/
-                                    <br />
-                                    - [Release flow](release.md) — tag → notes → publish
-                                    <br />
-                                    <span class="dim">+ 4 more entries…</span>
+                                <div v-if="auto.preview.length" class="mempreview">
+                                    <template v-for="(l, i) in auto.preview" :key="i">
+                                        {{ l }}
+                                        <br />
+                                    </template>
                                 </div>
+                                <div v-else class="hint" style="margin-top: 8px">No MEMORY.md written yet.</div>
+                            </div>
+                            <div v-else class="card-b">
+                                <span class="hint">No project selected — auto memory is per-project.</span>
                             </div>
                         </div>
                     </div>

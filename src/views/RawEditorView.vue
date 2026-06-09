@@ -1,179 +1,29 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import Icon from '@/components/Icon.vue';
 import ProvenanceChip from '@/components/ProvenanceChip.vue';
 import { toast } from '@/composables/useToast';
-import type { ScopeId } from '@/lib/scopes';
+import { useConfigStore } from '@/stores/config';
+import type { RawFile, RawHealth as Health, RawLine as Line } from '@shared/contract';
 
-// ── Types ──
-type Health = 'ok' | 'warn' | 'err';
-type LintType = 'err' | 'warn';
+type FileId = string;
 
-interface Lint {
-    type: LintType;
-    msg: string;
-    action: string;
-}
-interface Line {
-    t: string;
-    n?: number;
-    g?: LintType;
-    hi?: boolean;
-    key?: string;
-    lint?: Lint;
-    folded?: boolean;
-}
-interface RawFile {
-    scope: ScopeId;
-    path: string;
-    label: string;
-    health: Health;
-    committed?: boolean;
-    gitignore?: boolean;
-    locked?: boolean;
-    dragons?: boolean;
-    parseErr?: { line: number; msg: string };
-    lines: Line[];
-}
-type FileId = 'proj' | 'local' | 'user' | 'mgmt' | 'mgmt2' | 'global';
-interface TreeGroup {
-    scope: ScopeId;
-    ids: FileId[];
-}
+// File tree + line-annotated contents come live from the engine. Managed files
+// are read-only; writable files save through the atomic write + backup pipeline.
+const config = useConfigStore();
+const files = computed<RawFile[]>(() => config.raw?.files ?? []);
+const TREE = computed(() => config.raw?.tree ?? []);
+const byId = computed(() => {
+    const m = new Map<FileId, RawFile>();
+    for (const f of files.value) m.set(f.id, f);
+    return m;
+});
 
-// ── line helper, mirroring L(t, opts) ──
-function L(t: string, opts: Partial<Line> = {}): Line {
-    return { ...opts, t };
+const EMPTY_FILE: RawFile = { id: '', scope: 'user', realPath: '', path: '', label: '', health: 'ok', content: '', lines: [] };
+function fileById(id: FileId): RawFile {
+    return byId.value.get(id) ?? EMPTY_FILE;
 }
-
-// ── files (fixture, preserved verbatim) ──
-const FILES: Record<FileId, RawFile> = {
-    proj: {
-        scope: 'project',
-        path: '.claude/settings.json',
-        label: 'settings.json',
-        health: 'warn',
-        committed: true,
-        lines: [
-            L('{'),
-            L('  "$schema": "…/claude-code-settings.json",'),
-            L('  "model": "claude-sonnet-4-6",'),
-            L('  "permissions": {'),
-            L('    "defaultMode": "acceptEdits",', { hi: true, key: 'defaultMode' }),
-            L('    "allow": ["Bash(npm run *)", "Bash(curl localhost*)"],', {
-                g: 'warn',
-                lint: { type: 'warn', msg: 'Bash(curl localhost*) is unreachable — always matched first by managed deny Bash(curl *).', action: 'Explain' },
-            }),
-            L('    "ask": ["Bash(git push *)"],'),
-            L('    "deny": ["Read(./.env)", "Read(./.env.*)"],'),
-            L('    "additionalDirectories": ["../config-studio-docs/"]'),
-            L('  },'),
-            L('  "enabledPlugins": { "formatter@team-tools": true },'),
-            L('  "extraKnownMarketplaces": { "team-tools": { "source": {…} } }'),
-            L('}'),
-        ],
-    },
-    local: {
-        scope: 'local',
-        path: '.claude/settings.local.json',
-        label: 'settings.local.json',
-        health: 'ok',
-        gitignore: true,
-        lines: [
-            L('{'),
-            L('  "permissions": {'),
-            L('    "defaultMode": "auto"', {
-                hi: true,
-                key: 'defaultMode',
-                g: 'warn',
-                lint: { type: 'warn', msg: 'Ignored — “auto” mode can only be set in user settings (since v2.1.142).', action: 'Move to user' },
-            }),
-            L('  },'),
-            L('  "outputStyle": "Explanatory",'),
-            L('  "enabledPlugins": { "formatter@team-tools": false }'),
-            L('}'),
-        ],
-    },
-    user: {
-        scope: 'user',
-        path: '~/.claude/settings.json',
-        label: 'settings.json',
-        health: 'warn',
-        lines: [
-            L('{'),
-            L('  "model": "claude-opus-4-7",'),
-            L('  "effortLevel": "high",'),
-            L('  "alwaysThinkingEnabled": true,'),
-            L('  "editorMode": "vim",'),
-            L('  "autoConnectIde": true,', {
-                g: 'warn',
-                lint: { type: 'warn', msg: 'Wrong file — autoConnectIde belongs in ~/.claude.json or it is ignored.', action: 'Move it' },
-            }),
-            L('  "permissions": { "defaultMode": "plan", "allow": ["Bash(git diff *)","Bash(git log *)"], "deny": ["Read(~/.ssh/**)"] },', { key: 'defaultMode' }),
-            L('  "env": {'),
-            L('    "NODE_ENV": "development",'),
-            L('    "NPM_TOKEN": "npm_••••••••••••"  // masked', {
-                g: 'warn',
-                lint: { type: 'warn', msg: 'Secret detected — masked by default. Reveal per-field; never written to diffs.', action: 'Reveal' },
-            }),
-            L('  }'),
-            L('}'),
-        ],
-    },
-    mgmt: {
-        scope: 'managed',
-        path: '/etc/claude-code/managed-settings.json',
-        label: 'managed-settings.json',
-        health: 'ok',
-        locked: true,
-        lines: [
-            L('{'),
-            L('  "permissions": { "deny": ["Bash(curl *)", "Read(//etc/secrets/**)"] },'),
-            L('  "disableBypassPermissionsMode": "disable",'),
-            L('  "forceLoginMethod": "claudeai",'),
-            L('  "sandbox": { "network": { "deniedDomains": ["uploads.github.com"] } }'),
-            L('}'),
-        ],
-    },
-    mgmt2: {
-        scope: 'managed',
-        path: 'managed-settings.d/20-experimental.json',
-        label: '20-experimental.json',
-        health: 'err',
-        locked: true,
-        parseErr: { line: 4, msg: 'Unexpected token } — trailing comma after "autoUpdatesChannel" (line 4). File excluded from resolution.' },
-        lines: [
-            L('{'),
-            L('  "spinnerTipsEnabled": false,'),
-            L('  "autoUpdatesChannel": "stable",', { g: 'err' }),
-            L('}', { g: 'err', lint: { type: 'err', msg: 'Trailing comma — invalid JSON. This whole file is excluded until fixed.', action: 'Open docs' } }),
-        ],
-    },
-    global: {
-        scope: 'user',
-        path: '~/.claude.json',
-        label: '.claude.json',
-        health: 'ok',
-        dragons: true,
-        lines: [
-            L('{'),
-            L('  "oauthAccount": { … },', { folded: true }),
-            L('  "mcpServers": {'),
-            L('    "github": { "type": "http", "url": "https://api.githubcopilot.com/mcp",'),
-            L('               "headers": { "Authorization": "Bearer ${GITHUB_PAT}" } }'),
-            L('  },'),
-            L('  "projects": { "/home/alex/Projects/config-studio": { "hasTrustDialogAccepted": true, … } }'),
-        ],
-    },
-};
-
-const TREE: TreeGroup[] = [
-    { scope: 'managed', ids: ['mgmt', 'mgmt2'] },
-    { scope: 'local', ids: ['local'] },
-    { scope: 'project', ids: ['proj'] },
-    { scope: 'user', ids: ['user', 'global'] },
-];
 
 // ── JSON colorizer (line-level), ported from color() ──
 function colorize(t: string): string {
@@ -187,17 +37,27 @@ function colorize(t: string): string {
 
 // ── reactive state ──
 const route = useRoute();
-const curId = ref<FileId>('proj');
+const curId = ref<FileId>('');
 const split = ref(route.query.key === 'defaultMode');
 const splitKey = 'defaultMode';
-// mutable copy of the project lines so the diff-confirm can remove a line.
-const projLines = ref<Line[]>([...FILES.proj.lines]);
 
-const SPLIT_LEFT: FileId = 'proj';
-const SPLIT_RIGHT: FileId = 'local';
+// Hero side-by-side: project settings (winner) vs local settings (ignored).
+const SPLIT_LEFT = computed<FileId>(() => files.value.find((f) => f.scope === 'project' && f.label.includes('settings.json'))?.id ?? 'proj');
+const SPLIT_RIGHT = computed<FileId>(() => files.value.find((f) => f.scope === 'local')?.id ?? 'local');
+
+// Select a sensible default file once the snapshot loads.
+watch(
+    files,
+    (list) => {
+        if (!curId.value || !byId.value.has(curId.value)) {
+            curId.value = list.find((f) => f.scope === 'project')?.id ?? list[0]?.id ?? '';
+        }
+    },
+    { immediate: true },
+);
 
 function fileLines(id: FileId): Line[] {
-    return id === 'proj' ? projLines.value : FILES[id].lines;
+    return fileById(id).lines;
 }
 function healthCls(h: Health): string {
     return (
@@ -207,7 +67,7 @@ function healthCls(h: Health): string {
     );
 }
 
-const curFile = computed(() => FILES[curId.value]);
+const curFile = computed(() => fileById(curId.value));
 
 // Numbered render rows: foldeds don't get a gutter number but DO consume a line
 // number (matching the prototype's n++ before the folded branch).
@@ -242,7 +102,7 @@ function openFile(id: FileId): void {
 }
 function toggleSplit(): void {
     split.value = !split.value;
-    if (split.value) curId.value = 'proj';
+    if (split.value) curId.value = SPLIT_LEFT.value;
 }
 function lintAction(action: string): void {
     toast(`“${action}” — guided fix opens`, 'sliders');
@@ -256,18 +116,25 @@ const saveBarOk = computed(() => curFile.value.health !== 'err');
 const saveBarStatus = computed(() => {
     const f = curFile.value;
     if (!saveBarOk.value) return 'Invalid JSON — cannot save';
-    return f.health === 'warn' ? 'Valid JSON · 1 semantic warning' : 'Valid JSON';
+    return f.health === 'warn' ? 'Valid JSON · semantic warnings' : 'Valid JSON';
 });
 const saveBarMeta = computed(() => {
     const f = curFile.value;
-    return (f.gitignore ? 'gitignored · ' : '') + (f.committed ? 'committed · ' : '') + 'last saved Jun 6';
+    return (f.gitignore ? 'gitignored · ' : '') + (f.committed ? 'committed · ' : '') + f.path;
 });
-function doSave(): void {
+async function doSave(): Promise<void> {
     const f = curFile.value;
-    toast(`Saved ${f.label} · backup created`, 'check', 'Undo', () => toast('Restored from backup', 'check'));
+    if (!f.realPath) {
+        toast('This file is read-only.', 'alert');
+        return;
+    }
+    const res = await config.saveFile({ realPath: f.realPath, content: f.content });
+    if (res.ok) toast(`Saved ${f.label}${res.backupPath ? ' · backup created' : ''}`, 'check');
+    else toast(res.blocked ?? res.error ?? 'Save failed', 'alert');
 }
 function doRevert(): void {
-    toast('Reverted unsaved changes', 'check');
+    void config.load();
+    toast('Reloaded from disk', 'check');
 }
 
 // ── diff modal (hero step 4) ──
@@ -278,12 +145,11 @@ function openDiff(): void {
 function closeDiff(): void {
     diffOpen.value = false;
 }
-function confirmDiff(): void {
+async function confirmDiff(): Promise<void> {
     diffOpen.value = false;
-    projLines.value = projLines.value.filter((l) => l.key !== 'defaultMode');
-    toast('Project defaultMode removed · now resolves to User “plan” · backup created', 'check', 'Undo', () => {
-        projLines.value = [...FILES.proj.lines];
-    });
+    const res = await config.applyChange({ kind: 'removeDefaultMode', scope: 'project' });
+    if (res.ok) toast('Project defaultMode removed · now resolves to the User value · backup created', 'check');
+    else toast(res.blocked ?? res.error ?? 'Change failed', 'alert');
 }
 </script>
 
@@ -297,12 +163,12 @@ function confirmDiff(): void {
                         <div class="h"><ProvenanceChip :scope="g.scope" /></div>
                         <div v-for="id in g.ids" :key="id" class="fitem" :class="{ on: id === curId && !split }" @click="openFile(id)">
                             <span class="fdot">
-                                <span class="health" :class="healthCls(FILES[id].health)"><span class="dot"></span></span>
+                                <span class="health" :class="healthCls(fileById(id).health)"><span class="dot"></span></span>
                             </span>
-                            <span>{{ FILES[id].label }}</span>
+                            <span>{{ fileById(id).label }}</span>
                             <span class="fb">
-                                <span v-if="FILES[id].locked" class="tag lock" title="read-only"><Icon name="lock" :size="10" /></span>
-                                <span v-if="FILES[id].gitignore" class="tag gitignore">git</span>
+                                <span v-if="fileById(id).locked" class="tag lock" title="read-only"><Icon name="lock" :size="10" /></span>
+                                <span v-if="fileById(id).gitignore" class="tag gitignore">git</span>
                             </span>
                         </div>
                     </div>
@@ -330,8 +196,8 @@ function confirmDiff(): void {
                             <!-- winner -->
                             <div class="pane">
                                 <div class="pane-h">
-                                    <ProvenanceChip :scope="FILES[SPLIT_LEFT].scope" />
-                                    <span class="ph-path">{{ FILES[SPLIT_LEFT].path }}</span>
+                                    <ProvenanceChip :scope="fileById(SPLIT_LEFT).scope" />
+                                    <span class="ph-path">{{ fileById(SPLIT_LEFT).path }}</span>
                                     <span class="tag info" style="margin-left: auto">
                                         <Icon name="check" :size="10" />
                                         winner
@@ -370,8 +236,8 @@ function confirmDiff(): void {
                             <!-- ignored -->
                             <div class="pane">
                                 <div class="pane-h">
-                                    <ProvenanceChip :scope="FILES[SPLIT_RIGHT].scope" />
-                                    <span class="ph-path">{{ FILES[SPLIT_RIGHT].path }}</span>
+                                    <ProvenanceChip :scope="fileById(SPLIT_RIGHT).scope" />
+                                    <span class="ph-path">{{ fileById(SPLIT_RIGHT).path }}</span>
                                     <span class="tag warn" style="margin-left: auto">
                                         <Icon name="alert" :size="10" />
                                         ignored

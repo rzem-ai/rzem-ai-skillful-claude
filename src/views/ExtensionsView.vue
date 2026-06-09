@@ -1,99 +1,14 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import Icon from '@/components/Icon.vue';
 import ProvenanceChip from '@/components/ProvenanceChip.vue';
-import type { ScopeId } from '@/lib/scopes';
+import { useConfigStore } from '@/stores/config';
+import type { ExtSection } from '@shared/contract';
 
-// ── Fixture: extensions discovered across scopes ──
-interface ExtItem {
-    name: string;
-    scope: ScopeId;
-    icon: string;
-    desc: string;
-    meta: string;
-    file: string;
-    disabled?: boolean;
-    override?: boolean;
-}
-interface ExtSection {
-    title: string;
-    icon: string;
-    items: ExtItem[];
-}
-
-const SECTIONS: ExtSection[] = [
-    {
-        title: 'Subagents',
-        icon: 'user',
-        items: [
-            {
-                name: 'code-reviewer',
-                scope: 'user',
-                icon: 'user',
-                desc: 'Reviews diffs for correctness and reuse.',
-                meta: 'tools: Read · Grep',
-                file: '~/.claude/agents/code-reviewer.md',
-            },
-        ],
-    },
-    {
-        title: 'Skills',
-        icon: 'puzzle',
-        items: [
-            {
-                name: 'release-notes',
-                scope: 'project',
-                icon: 'puzzle',
-                desc: 'Generates release notes from merged PRs.',
-                meta: 'SKILL.md · committed',
-                file: '.claude/skills/release-notes/',
-            },
-        ],
-    },
-    {
-        title: 'Slash commands',
-        icon: 'terminal',
-        items: [
-            {
-                name: '/changelog',
-                scope: 'project',
-                icon: 'terminal',
-                desc: 'Appends a changelog entry from the current diff.',
-                meta: 'committed',
-                file: '.claude/commands/changelog.md',
-            },
-        ],
-    },
-    {
-        title: 'Output styles',
-        icon: 'sliders',
-        items: [
-            {
-                name: 'Explanatory',
-                scope: 'local',
-                icon: 'sliders',
-                desc: 'Verbose, teaching-oriented responses.',
-                meta: 'active · set in local settings',
-                file: '.claude/settings.local.json',
-            },
-        ],
-    },
-    {
-        title: 'Plugins & marketplaces',
-        icon: 'grid',
-        items: [
-            {
-                name: 'formatter@team-tools',
-                scope: 'project',
-                icon: 'grid',
-                desc: 'Auto-formats on save. Enabled by the team, but turned OFF on this machine.',
-                meta: 'overridden locally',
-                file: 'team-tools · github:rzem/claude-plugins',
-                disabled: true,
-                override: true,
-            },
-        ],
-    },
-];
+// Extensions discovered across scopes come live from the engine.
+const config = useConfigStore();
+const SECTIONS = computed<ExtSection[]>(() => config.extensions?.sections ?? []);
+const skillBudgetNote = computed(() => config.extensions?.skillBudgetNote ?? '');
 </script>
 
 <template>
@@ -147,9 +62,7 @@ const SECTIONS: ExtSection[] = [
                     <div class="row" style="gap: 10px">
                         <span style="color: var(--fg-dim)"><Icon name="info" :size="15" /></span>
                         <div class="hint" style="line-height: 1.55">
-                            Skill-listing budget simulation: at the current
-                            <code class="mono-v">skillListingBudgetFraction</code>
-                            , all 1 skill description fits — none would truncate. Increase skills to preview truncation.
+                            Skill-listing budget simulation: {{ skillBudgetNote }} Increase skills to preview truncation.
                         </div>
                     </div>
                 </div>

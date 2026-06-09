@@ -1,81 +1,13 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import Icon from '@/components/Icon.vue';
 import ProvenanceChip from '@/components/ProvenanceChip.vue';
-import type { ScopeId } from '@/lib/scopes';
+import { useConfigStore } from '@/stores/config';
+import type { FileHealth, Layer } from '@shared/contract';
 
-// ── Fixture: the five configuration layers in precedence order ──
-type FileHealth = 'ok' | 'warn' | 'err' | 'miss';
-
-interface LayerFile {
-    path: string;
-    health: FileHealth;
-    note?: string;
-    gitignore?: boolean;
-    committed?: boolean;
-}
-
-interface Layer {
-    scope: ScopeId;
-    win: boolean;
-    keys: number;
-    mod: string;
-    delivery?: string;
-    empty?: boolean;
-    gitignore?: boolean;
-    committed?: boolean;
-    health: { cls: FileHealth; label: string };
-    files: LayerFile[];
-}
-
-const LAYERS: Layer[] = [
-    {
-        scope: 'managed',
-        win: true,
-        keys: 4,
-        mod: 'May 12',
-        delivery: 'Enforced via file',
-        health: { cls: 'warn', label: '1 of 2 files invalid' },
-        files: [
-            { path: '/etc/claude-code/managed-settings.json', health: 'ok', note: 'Base policy — deny rules, login method, sandbox network' },
-            { path: '/etc/claude-code/managed-settings.d/20-experimental.json', health: 'err', note: 'Invalid JSON — trailing comma at line 4. Excluded from resolution.' },
-        ],
-    },
-    {
-        scope: 'cli',
-        win: false,
-        keys: 0,
-        mod: '—',
-        empty: true,
-        health: { cls: 'miss', label: 'No flags this session' },
-        files: [{ path: '--model · --permission-mode · --settings', health: 'miss', note: 'Session-only overrides. None passed when this project was opened.' }],
-    },
-    {
-        scope: 'local',
-        win: false,
-        keys: 3,
-        mod: 'Jun 6',
-        gitignore: true,
-        health: { cls: 'ok', label: 'Valid · 1 ignored key' },
-        files: [{ path: '.claude/settings.local.json', health: 'ok', gitignore: true, note: 'defaultMode: "auto" is ignored by rule (auto is user-scope only).' }],
-    },
-    {
-        scope: 'project',
-        win: false,
-        keys: 5,
-        mod: 'Jun 5',
-        committed: true,
-        health: { cls: 'warn', label: 'Valid · 1 unreachable rule' },
-        files: [{ path: '.claude/settings.json', health: 'warn', committed: true, note: 'allow Bash(curl localhost*) can never beat the managed curl deny.' }],
-    },
-    {
-        scope: 'user',
-        win: false,
-        keys: 8,
-        mod: 'Jun 2',
-        health: { cls: 'warn', label: 'Valid · 1 wrong-file key, 1 secret' },
-        files: [{ path: '~/.claude/settings.json', health: 'warn', note: 'autoConnectIde belongs in ~/.claude.json · NPM_TOKEN masked.' }],
-    },
-];
+// The five configuration layers come live from the engine snapshot.
+const config = useConfigStore();
+const LAYERS = computed<Layer[]>(() => config.scopeStack);
 
 const HEALTH_LABEL: Record<FileHealth, string> = {
     ok: 'Valid',

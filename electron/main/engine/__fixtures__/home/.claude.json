@@ -1,0 +1,22 @@
+{
+  "oauthAccount": { "note": "folded - read-only by default" },
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp",
+      "headers": { "Authorization": "Bearer ${GITHUB_PAT}" }
+    }
+  },
+  "projects": {
+    "__PROJECT__": {
+      "mcpServers": {
+        "scratch-db": {
+          "type": "stdio",
+          "command": "npx",
+          "args": ["@modelcontextprotocol/server-postgres", "postgresql://localhost/scratch"]
+        }
+      },
+      "hasTrustDialogAccepted": true
+    }
+  }
+}

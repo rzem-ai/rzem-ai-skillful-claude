@@ -1,91 +1,25 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import Icon from '@/components/Icon.vue';
 import ProvenanceChip from '@/components/ProvenanceChip.vue';
 import { toast } from '@/composables/useToast';
-import type { ScopeId } from '@/lib/scopes';
+import { useConfigStore } from '@/stores/config';
+import type { Server } from '@shared/contract';
 
-// ── Fixture: MCP servers across scopes ──
-// Collisions resolve Local › Project › User; the winner shows on top and the
-// shadowed (lower-scope) definition renders as a ghosted, struck-through card.
-interface EnvVar {
-    name: string;
-    resolved: boolean;
-    note: string;
-}
-interface ShadowDef {
-    scope: ScopeId;
-    target: string;
-    file: string;
-    note: string;
-}
-interface ServerStatus {
-    cls: 'ok' | 'warn';
-    label: string;
-}
-interface Server {
-    name: string;
-    scope: ScopeId;
-    transport: string;
-    target: string;
-    status: ServerStatus;
-    file: string;
-    env: EnvVar[];
-    collision?: string;
-    shadow?: ShadowDef;
-}
-
-const SERVERS: Server[] = [
-    {
-        name: 'github',
-        scope: 'project',
-        transport: 'http',
-        target: 'https://api.githubcopilot.com/mcp',
-        status: { cls: 'ok', label: 'Connected' },
-        file: '.mcp.json',
-        env: [],
-        collision: 'Project beats User — both define “github”. User definition is shadowed.',
-        shadow: {
-            scope: 'user',
-            target: 'https://api.githubcopilot.com/mcp',
-            file: '~/.claude.json',
-            note: 'Identical URL, lower scope',
-        },
-    },
-    {
-        name: 'sentry',
-        scope: 'project',
-        transport: 'http',
-        target: 'https://mcp.sentry.dev/mcp',
-        status: { cls: 'warn', label: 'Unresolved variable' },
-        file: '.mcp.json',
-        env: [{ name: 'SENTRY_AUTH_TOKEN', resolved: false, note: 'unset · no default' }],
-    },
-    {
-        name: 'docs-search',
-        scope: 'project',
-        transport: 'http',
-        target: '${DOCS_API_BASE:-…}/mcp',
-        status: { cls: 'ok', label: 'Connected' },
-        file: '.mcp.json',
-        env: [{ name: 'DOCS_API_BASE', resolved: true, note: 'default → https://docs.internal.rzem.dev' }],
-    },
-    {
-        name: 'scratch-db',
-        scope: 'local',
-        transport: 'stdio',
-        target: 'npx @modelcontextprotocol/server-postgres postgresql://localhost/scratch',
-        status: { cls: 'ok', label: 'Connected' },
-        file: '~/.claude.json · projects[config-studio]',
-        env: [],
-    },
-];
+// MCP servers across scopes come live from the engine; collisions resolve
+// Local › Project › User with the loser rendered as a ghosted shadow card.
+const config = useConfigStore();
+const SERVERS = computed<Server[]>(() => config.mcp);
+const connectedCount = computed(() => SERVERS.value.filter((s) => s.status.cls === 'ok').length);
+const warnCount = computed(() => SERVERS.value.filter((s) => s.status.cls === 'warn').length);
 
 const router = useRouter();
 
 function testConnection(s: Server): void {
-    if (s.name === 'sentry') {
-        toast('sentry: cannot connect — ${SENTRY_AUTH_TOKEN} is unset', 'alert');
+    const unresolved = s.env.find((e) => !e.resolved);
+    if (unresolved) {
+        toast(`${s.name}: cannot connect — \${${unresolved.name}} is unset`, 'alert');
     } else {
         toast(`${s.name}: connection OK`, 'check');
     }
@@ -106,13 +40,18 @@ function openSource(): void {
                 </div>
                 <div class="spacer"></div>
                 <span class="hint">
-                    4 servers ·
-                    <span style="color: var(--ok)">3 connected</span>
-                    ·
-                    <span style="color: var(--warn)">1 needs a variable</span>
+                    {{ SERVERS.length }} server{{ SERVERS.length === 1 ? '' : 's' }} ·
+                    <span style="color: var(--ok)">{{ connectedCount }} connected</span>
+                    <template v-if="warnCount">
+                        ·
+                        <span style="color: var(--warn)">{{ warnCount }} need{{ warnCount === 1 ? 's' : '' }} a variable</span>
+                    </template>
                 </span>
             </div>
             <div class="view-body">
+                <div v-if="!SERVERS.length" class="card" style="padding: 22px; text-align: center">
+                    <span class="hint">{{ config.hasProject ? 'No MCP servers configured across user, project, or local scopes.' : 'No project selected — only user-scope servers resolve.' }}</span>
+                </div>
                 <div class="mcp-grid">
                     <div v-for="s in SERVERS" :key="s.name" class="card srv" :class="{ stacked: s.shadow }">
                         <div class="card-h">
