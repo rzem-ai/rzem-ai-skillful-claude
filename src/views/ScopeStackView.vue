@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, reactive } from 'vue';
 import Icon from '@/components/Icon.vue';
 import ProvenanceChip from '@/components/ProvenanceChip.vue';
 import { useConfigStore } from '@/stores/config';
-import type { FileHealth, Layer } from '@shared/contract';
+import type { FileHealth, Layer, ScopeId } from '@shared/contract';
 
 // The five configuration layers come live from the engine snapshot.
 const config = useConfigStore();
@@ -14,6 +14,18 @@ const HEALTH_LABEL: Record<FileHealth, string> = {
     warn: 'Warnings',
     err: 'Invalid JSON',
     miss: 'Not present',
+};
+
+// A layer with nothing on disk (health 'miss') collapses to just its header —
+// the meta grid and file rows would only repeat "Not present". The header still
+// carries the scope chip + status, and the body stays one click away.
+const collapsible = (l: Layer): boolean => l.health.cls === 'miss';
+
+// Per-scope manual overrides: opening a collapsed layer or closing a present one.
+const overrides = reactive<Partial<Record<ScopeId, boolean>>>({});
+const isOpen = (l: Layer): boolean => overrides[l.scope] ?? !collapsible(l);
+const toggle = (l: Layer): void => {
+    overrides[l.scope] = !isOpen(l);
 };
 </script>
 
@@ -48,9 +60,18 @@ const HEALTH_LABEL: Record<FileHealth, string> = {
                                 <div class="num">{{ i + 1 }}</div>
                                 <div class="conn"></div>
                             </div>
-                            <div class="card lcard">
-                                <div class="card-h">
+                            <div class="card lcard" :class="{ collapsed: !isOpen(l) }">
+                                <button
+                                    type="button"
+                                    class="card-h"
+                                    :class="{ toggle: collapsible(l) }"
+                                    :aria-expanded="isOpen(l)"
+                                    @click="collapsible(l) && toggle(l)"
+                                >
                                     <div class="lh-left">
+                                        <span v-if="collapsible(l)" class="chev">
+                                            <Icon :name="isOpen(l) ? 'chevDown' : 'chevRight'" :size="13" />
+                                        </span>
                                         <ProvenanceChip :scope="l.scope" :solid="true" />
                                         <span v-if="l.win" class="winner-flag">cannot be overridden</span>
                                     </div>
@@ -58,9 +79,9 @@ const HEALTH_LABEL: Record<FileHealth, string> = {
                                         <span class="dot"></span>
                                         {{ l.health.label }}
                                     </span>
-                                </div>
+                                </button>
 
-                                <div class="lmeta">
+                                <div v-show="isOpen(l)" class="lmeta">
                                     <div class="m">
                                         <span class="ml">Keys defined</span>
                                         <span class="mv">{{ l.empty ? '—' : l.keys }}</span>
@@ -89,7 +110,7 @@ const HEALTH_LABEL: Record<FileHealth, string> = {
                                     </div>
                                 </div>
 
-                                <div class="files">
+                                <div v-show="isOpen(l)" class="files">
                                     <div v-for="(f, fi) in l.files" :key="fi" class="frow">
                                         <div>
                                             <div class="fpath">
@@ -186,6 +207,31 @@ const HEALTH_LABEL: Record<FileHealth, string> = {
 }
 .lcard .card-h {
     justify-content: space-between;
+    /* the header is a <button>; strip native chrome and inherit layout/colour */
+    width: 100%;
+    margin: 0;
+    background: none;
+    border-left: 0;
+    border-right: 0;
+    border-top: 0;
+    color: inherit;
+    text-align: left;
+    font: inherit;
+}
+.lcard .card-h.toggle {
+    cursor: pointer;
+}
+.lcard .card-h.toggle:hover {
+    background: var(--surface-2);
+}
+/* a collapsed card is header-only — drop the divider that would dangle below it */
+.lcard.collapsed .card-h {
+    border-bottom-color: transparent;
+}
+.lcard .chev {
+    display: flex;
+    color: var(--fg-dim);
+    margin-right: -2px;
 }
 .lcard .lh-left {
     display: flex;

@@ -47,10 +47,10 @@ const NAV = computed<NavGroup[]>(() => {
             icon: 'sliders',
             items: [
                 { id: 'g-perm', label: 'Permissions', to: '/guided/permissions', icon: 'lock' },
-                { id: 'g-model', label: 'Model & Effort', to: '/guided/permissions', icon: 'sliders' },
-                { id: 'g-env', label: 'Environment', to: '/guided/permissions', icon: 'terminal' },
-                { id: 'g-mcp', label: 'MCP Servers', to: '/guided/permissions', icon: 'server' },
-                { id: 'g-mem', label: 'Memory', to: '/guided/permissions', icon: 'file' },
+                { id: 'g-model', label: 'Model & Effort', to: '/guided/model', icon: 'sliders' },
+                { id: 'g-env', label: 'Environment', to: '/guided/environment', icon: 'terminal' },
+                { id: 'g-mcp', label: 'MCP Servers', to: '/guided/mcp', icon: 'server' },
+                { id: 'g-mem', label: 'Memory', to: '/guided/memory', icon: 'file' },
             ],
         },
         {

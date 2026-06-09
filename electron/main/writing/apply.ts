@@ -4,7 +4,7 @@
 // file diff and the effective-config diff before anything touches disk.
 
 import { readFileSync } from 'node:fs';
-import type { ApplyPreview, ChangeOp, DiffLine, ScopeId, WriteResult } from '../../shared/contract.js';
+import type { ApplyPreview, ChangeOp, DiffLine, McpServerInput, ScopeId, WriteResult } from '../../shared/contract.js';
 import { type EngineEnv, paths } from '../engine/env.js';
 import { discoverSources } from '../engine/sources.js';
 import { effectiveDefaultMode } from '../engine/permissions.js';
@@ -44,12 +44,79 @@ function ensurePerms(obj: Record<string, unknown>): Record<string, unknown> {
     return obj.permissions as Record<string, unknown>;
 }
 
+function ensureObj(parent: Record<string, unknown>, key: string): Record<string, unknown> {
+    if (!parent[key] || typeof parent[key] !== 'object' || Array.isArray(parent[key])) parent[key] = {};
+    return parent[key] as Record<string, unknown>;
+}
+
+function blockedResult(reason: string): Resolved {
+    return { targetPath: '', display: '', before: {}, after: {}, blocked: reason };
+}
+
+// Render the on-disk MCP server definition from the form input. stdio servers
+// carry `command`/`args`; http & sse carry `type` + `url`. The engine's
+// transport inference reads exactly these shapes back.
+function serverToDef(s: McpServerInput): Record<string, unknown> {
+    if (s.transport === 'stdio') {
+        const def: Record<string, unknown> = { command: s.command ?? '' };
+        if (s.args && s.args.length) def.args = s.args;
+        if (s.env && Object.keys(s.env).length) def.env = s.env;
+        return def;
+    }
+    const def: Record<string, unknown> = { type: s.transport, url: s.url ?? '' };
+    if (s.env && Object.keys(s.env).length) def.env = s.env;
+    return def;
+}
+
+// MCP servers do not live in settings.json. Project servers go in .mcp.json;
+// user servers in ~/.claude.json (mcpServers); local servers in ~/.claude.json
+// under projects[<projectDir>].mcpServers.
+function resolveMcpWrite(op: Extract<ChangeOp, { kind: 'addMcpServer' | 'removeMcpServer' }>, env: EngineEnv): Resolved {
+    const p = paths(env);
+    if (op.scope === 'user') {
+        const targetPath = p.globalState;
+        const before = readJson(targetPath);
+        const after = clone(before);
+        mutateServers(ensureObj(after, 'mcpServers'), op);
+        return { targetPath, display: shortPath(targetPath, env), before, after };
+    }
+    if (!env.projectDir) {
+        return blockedResult('No project is selected, so project/local MCP servers cannot be written. Pick a project first.');
+    }
+    if (op.scope === 'project') {
+        const targetPath = p.projectMcp!;
+        const before = readJson(targetPath);
+        const after = clone(before);
+        mutateServers(ensureObj(after, 'mcpServers'), op);
+        return { targetPath, display: shortPath(targetPath, env), before, after };
+    }
+    // local → ~/.claude.json · projects[<dir>].mcpServers
+    const targetPath = p.globalState;
+    const before = readJson(targetPath);
+    const after = clone(before);
+    const projects = ensureObj(after, 'projects');
+    const proj = ensureObj(projects, env.projectDir);
+    mutateServers(ensureObj(proj, 'mcpServers'), op);
+    return { targetPath, display: shortPath(targetPath, env), before, after };
+}
+
+function mutateServers(servers: Record<string, unknown>, op: Extract<ChangeOp, { kind: 'addMcpServer' | 'removeMcpServer' }>): void {
+    if (op.kind === 'addMcpServer') servers[op.name] = serverToDef(op.server);
+    else delete servers[op.name];
+}
+
 // Turn an op + scope into a concrete file mutation, or a block reason.
 export function resolveWrite(op: ChangeOp, env: EngineEnv): Resolved {
     const scope = op.scope;
     if (scope === 'managed' || scope === 'cli') {
         return blockedResult('Managed and CLI scopes are read-only — the app never writes to policy-controlled locations.');
     }
+
+    // MCP ops target .mcp.json / ~/.claude.json, not settings.json.
+    if (op.kind === 'addMcpServer' || op.kind === 'removeMcpServer') {
+        return resolveMcpWrite(op, env);
+    }
+
     const targetPath = settingsPathFor(scope, env);
     if (!targetPath) {
         return blockedResult('No project is selected, so project/local settings cannot be written. Pick a project first.');
@@ -62,34 +129,58 @@ export function resolveWrite(op: ChangeOp, env: EngineEnv): Resolved {
 
     const before = readJson(targetPath);
     const after = clone(before);
-    const perms = ensurePerms(after);
 
     switch (op.kind) {
         case 'setDefaultMode':
-            perms.defaultMode = op.mode;
+            ensurePerms(after).defaultMode = op.mode;
             break;
-        case 'removeDefaultMode':
+        case 'removeDefaultMode': {
+            const perms = ensurePerms(after);
             delete perms.defaultMode;
             if (Object.keys(perms).length === 0) delete after.permissions;
             break;
+        }
         case 'addRule': {
+            const perms = ensurePerms(after);
             const list = Array.isArray(perms[op.beh]) ? (perms[op.beh] as string[]) : [];
             if (!list.includes(op.spec)) list.push(op.spec);
             perms[op.beh] = list;
             break;
         }
         case 'removeRule': {
+            const perms = ensurePerms(after);
             const list = Array.isArray(perms[op.beh]) ? (perms[op.beh] as string[]) : [];
             perms[op.beh] = list.filter((s) => s !== op.spec);
+            break;
+        }
+        case 'reorderRules': {
+            // Rewrite the visible specs into the desired order, leaving any
+            // file-only entries (deduped losers) pinned to their original slots.
+            const perms = ensurePerms(after);
+            const cur = Array.isArray(perms[op.beh]) ? (perms[op.beh] as string[]) : [];
+            const desired = op.specs.filter((s) => cur.includes(s));
+            let di = 0;
+            perms[op.beh] = cur.map((s) => (op.specs.includes(s) ? desired[di++] : s));
+            break;
+        }
+        case 'setScalar':
+            after[op.key] = op.value;
+            break;
+        case 'removeScalar':
+            delete after[op.key];
+            break;
+        case 'setEnvVar':
+            ensureObj(after, 'env')[op.name] = op.value;
+            break;
+        case 'removeEnvVar': {
+            const e = ensureObj(after, 'env');
+            delete e[op.name];
+            if (Object.keys(e).length === 0) delete after.env;
             break;
         }
     }
 
     return { targetPath, display: shortPath(targetPath, env), before, after };
-
-    function blockedResult(reason: string): Resolved {
-        return { targetPath: '', display: '', before: {}, after: {}, blocked: reason };
-    }
 }
 
 function shortPath(abs: string, env: EngineEnv): string {
@@ -130,7 +221,87 @@ function effectiveDiff(op: ChangeOp, env: EngineEnv, after: Record<string, unkno
     if (op.kind === 'addRule') {
         return { lines: [{ add: true, text: `${op.beh} ${op.spec} (${op.scope})` }], note: 'Rule merged into the effective permission list.' };
     }
-    return { lines: [{ add: false, text: `${op.beh} ${op.spec} (${op.scope})` }], note: 'Rule removed from the effective permission list.' };
+    if (op.kind === 'removeRule') {
+        return { lines: [{ add: false, text: `${op.beh} ${op.spec} (${op.scope})` }], note: 'Rule removed from the effective permission list.' };
+    }
+    if (op.kind === 'reorderRules') {
+        return {
+            lines: op.specs.map((s, i) => ({ add: true, text: `${i + 1}. ${op.beh} ${s}` })),
+            note: `Evaluation order of ${op.scope} ${op.beh} rules rewritten — first match still wins.`,
+        };
+    }
+
+    // Scalar (model, effortLevel, …) and env vars resolve by scope override —
+    // recompute the effective winner with `after` swapped into the op's scope.
+    if (op.kind === 'setScalar' || op.kind === 'removeScalar' || op.kind === 'setEnvVar' || op.kind === 'removeEnvVar') {
+        const key = op.kind === 'setEnvVar' || op.kind === 'removeEnvVar' ? `env.${op.name}` : op.key;
+        const before = scalarWinner(discoverSources(env), key);
+        const patched = patchScope(discoverSources(env), op.scope, after);
+        const win = scalarWinner(patched, key);
+        const beforeStr = before ? `${key} = ${render(before.value)} (${before.scope})` : `${key} unset`;
+        const afterStr = win ? `${key} = ${render(win.value)} (${win.scope})` : `${key} unset`;
+        if (beforeStr === afterStr) {
+            return { lines: [{ add: true, text: afterStr + ' — no change to effective value' }], note: 'This scope is shadowed by a higher-precedence one; the change has no visible effect.' };
+        }
+        return {
+            lines: [
+                { add: false, text: beforeStr },
+                { add: true, text: afterStr },
+            ],
+            note: 'This is the resolved result after merge — what the agent will actually see.',
+        };
+    }
+
+    // MCP add/remove — collisions resolve Local › Project › User, so report the
+    // placement and whether it can win.
+    if (op.kind === 'addMcpServer') {
+        return { lines: [{ add: true, text: `${op.name} → ${mcpTargetLabel(op.server)} (${op.scope})` }], note: 'Server merged into the MCP map. If the same name exists at a higher-precedence scope it stays shadowed.' };
+    }
+    return { lines: [{ add: false, text: `${op.name} (${op.scope})` }], note: 'Server removed from the MCP map.' };
+}
+
+// Pull a (possibly dotted, one level) scalar out of one scope object.
+function getScalar(obj: Record<string, unknown>, key: string): unknown {
+    if (key.includes('.')) {
+        const [head, tail] = key.split('.', 2);
+        const sub = obj[head];
+        return sub && typeof sub === 'object' ? (sub as Record<string, unknown>)[tail] : undefined;
+    }
+    return obj[key];
+}
+
+// Effective scalar winner: managed › local › project › user (first defined).
+function scalarWinner(src: ReturnType<typeof discoverSources>, key: string): { value: unknown; scope: ScopeId } | null {
+    const order: [ScopeId, Record<string, unknown>][] = [
+        ['managed', src.managed],
+        ['local', src.local],
+        ['project', src.project],
+        ['user', src.user],
+    ];
+    for (const [scope, obj] of order) {
+        const v = getScalar(obj, key);
+        if (v !== undefined) return { value: v, scope };
+    }
+    return null;
+}
+
+function patchScope(src: ReturnType<typeof discoverSources>, scope: ScopeId, after: Record<string, unknown>): ReturnType<typeof discoverSources> {
+    return {
+        ...src,
+        managed: scope === 'managed' ? after : src.managed,
+        user: scope === 'user' ? after : src.user,
+        project: scope === 'project' ? after : src.project,
+        local: scope === 'local' ? after : src.local,
+    };
+}
+
+function render(v: unknown): string {
+    return typeof v === 'string' ? v : JSON.stringify(v);
+}
+
+function mcpTargetLabel(s: McpServerInput): string {
+    if (s.transport === 'stdio') return [s.command, ...(s.args ?? [])].filter(Boolean).join(' ') || '—';
+    return s.url || '—';
 }
 
 // Recompute effective defaultMode as if `after` replaced the op's scope object.

@@ -91,6 +91,49 @@ function unreg(id: string): void {
     pending.value = pending.value.filter((p) => p.id !== id);
 }
 
+// ── Drag-to-reorder (within one behaviour + scope group only) ──────────────
+const dragIndex = ref<number | null>(null);
+const dropIndex = ref<number | null>(null);
+
+// Two rows belong to the same reorderable group when they share behaviour and
+// scope and neither is a managed (locked) rule.
+function sameGroup(a: number, b: number): boolean {
+    const ra = rules.value[a];
+    const rb = rules.value[b];
+    return !!ra && !!rb && ra.beh === rb.beh && ra.scope === rb.scope && !ra.locked && !rb.locked;
+}
+function onDragStart(i: number, e: DragEvent): void {
+    if (rules.value[i].locked) {
+        e.preventDefault();
+        return;
+    }
+    dragIndex.value = i;
+    if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(i)); // Firefox needs a payload
+    }
+}
+function onDragOver(i: number): void {
+    if (dragIndex.value === null) return;
+    dropIndex.value = sameGroup(dragIndex.value, i) ? i : null;
+}
+function onDrop(i: number): void {
+    const from = dragIndex.value;
+    if (from === null || from === i || !sameGroup(from, i)) {
+        onDragEnd();
+        return;
+    }
+    const moved = rules.value.splice(from, 1)[0];
+    rules.value.splice(from < i ? i - 1 : i, 0, moved);
+    const specs = rules.value.filter((r) => r.beh === moved.beh && r.scope === moved.scope).map((r) => r.spec);
+    regPending(`reorder:${moved.beh}:${moved.scope}`, `Reorder ${moved.beh} rules (${SCOPES[moved.scope].label})`, { kind: 'reorderRules', beh: moved.beh, scope: moved.scope, specs });
+    onDragEnd();
+}
+function onDragEnd(): void {
+    dragIndex.value = null;
+    dropIndex.value = null;
+}
+
 function selectMode(m: { v: string; locked?: boolean; userOnly?: boolean }): void {
     if (m.locked) return;
     curMode.value = m.v;
@@ -288,7 +331,16 @@ async function commit(): Promise<void> {
                         </div>
                         <div class="card-b">
                             <div>
-                                <div v-for="(r, i) in rules" :key="r.spec + i" class="rule-edit">
+                                <div
+                                    v-for="(r, i) in rules"
+                                    :key="r.beh + ':' + r.scope + ':' + r.spec"
+                                    class="rule-edit"
+                                    :class="{ dragging: dragIndex === i, 'drop-target': dropIndex === i }"
+                                    :draggable="!r.locked"
+                                    @dragstart="onDragStart(i, $event)"
+                                    @dragover.prevent="onDragOver(i)"
+                                    @drop="onDrop(i)"
+                                    @dragend="onDragEnd">
                                     <span v-if="r.locked"></span>
                                     <span v-else class="drag"><Icon name="grip" :size="14" /></span>
                                     <span class="beh" :class="r.beh">{{ r.beh }}</span>
@@ -372,21 +424,22 @@ async function commit(): Promise<void> {
                         </div>
                     </div>
 
-                    <!-- Apply bar -->
-                    <div class="applybar">
-                        <span class="count">
-                            <b>{{ pendN }}</b>
-                            pending changes
-                        </span>
-                        <label class="chk" :class="{ on: showDiff }">
-                            <input v-model="showDiff" type="checkbox" />
-                            Preview diff before applying
-                        </label>
-                        <div class="spacer"></div>
-                        <button class="btn" :disabled="!canApply" @click="discard">Discard</button>
-                        <button class="btn primary" :disabled="!canApply" @click="apply">Apply changes</button>
-                    </div>
                 </div>
+            </div>
+            
+            <!-- Apply bar -->
+            <div class="applybar">
+                <span class="count">
+                    <b>{{ pendN }}</b>
+                    pending changes
+                </span>
+                <label class="chk" :class="{ on: showDiff }">
+                    <input v-model="showDiff" type="checkbox" />
+                    Preview diff before applying
+                </label>
+                <div class="spacer"></div>
+                <button class="btn" :disabled="!canApply" @click="discard">Discard</button>
+                <button class="btn primary" :disabled="!canApply" @click="apply">Apply changes</button>
             </div>
         </section>
 
@@ -448,7 +501,7 @@ async function commit(): Promise<void> {
 
 <style scoped>
 .guided {
-    max-width: 860px;
+/*    max-width: 860px;*/
 }
 .modes {
     display: grid;
@@ -558,10 +611,19 @@ async function commit(): Promise<void> {
     cursor: grab;
     display: flex;
 }
+.rule-edit[draggable='true']:active {
+    cursor: grabbing;
+}
+.rule-edit.dragging {
+    opacity: 0.45;
+}
+.rule-edit.drop-target {
+    box-shadow: inset 0 2px 0 0 var(--accent);
+}
 .applybar {
     position: sticky;
     bottom: 0;
-    margin: 18px -20px -28px;
+    margin: 18px 0px -28px;
     padding: 12px 20px;
     background: var(--surface-2);
     border-top: 1px solid var(--border);

@@ -223,6 +223,84 @@ export interface GuidedPermissionsModel {
     bypassLock: { value: string; channel: string } | null;
 }
 
+// ── Guided Model & Effort ───────────────────────────────────────────────────
+// A single resolved scalar setting the guided form edits. `scope` is where the
+// effective value comes from (null when nothing sets it → built-in default).
+export interface GuidedField {
+    value: string; // effective value, '' when unset
+    scope: ScopeId | null; // origin of the effective value
+    isDefault: boolean; // true when no scope sets it
+    locked?: boolean; // pinned by a managed policy
+}
+export interface GuidedChoice {
+    v: string;
+    label: string;
+    d: string;
+}
+export interface GuidedModelModel {
+    model: GuidedField;
+    effort: GuidedField;
+    thinking: GuidedField; // value is 'true' | 'false'
+    language: GuidedField;
+    modelOptions: GuidedChoice[];
+    effortOptions: GuidedChoice[];
+}
+
+// ── Guided Environment ──────────────────────────────────────────────────────
+export interface GuidedEnvVar {
+    name: string;
+    value: string; // real value (masked separately for display)
+    display: string; // masked when secret, otherwise == value
+    scope: ScopeId;
+    secret: boolean;
+    locked?: boolean; // defined by managed scope → read-only
+    shadowedBy?: ScopeId; // a higher-precedence scope overrides this name
+}
+export interface GuidedEnvModel {
+    vars: GuidedEnvVar[];
+    hasProject: boolean;
+}
+
+// ── Guided MCP ──────────────────────────────────────────────────────────────
+// The on-disk server definition the add form produces. The write-target
+// resolver routes it to .mcp.json (project) or ~/.claude.json (user/local).
+export interface McpServerInput {
+    transport: 'stdio' | 'http' | 'sse';
+    command?: string;
+    args?: string[];
+    url?: string;
+    env?: Record<string, string>;
+}
+export interface GuidedMcpModel {
+    servers: Server[]; // the resolved, merged list (reused from the MCP map)
+    transports: McpServerInput['transport'][];
+    scopeTargets: { v: ScopeId; t: string; d: string }[];
+    hasProject: boolean;
+}
+
+// ── Guided Memory ───────────────────────────────────────────────────────────
+// One creatable/editable CLAUDE.md slot per scope. Memory is markdown, so the
+// guided page writes whole files through the saveFile channel, not a ChangeOp.
+export interface GuidedMemorySlot {
+    scope: ScopeId;
+    label: string;
+    path: string; // display path
+    realPath: string; // absolute path on disk, for saveFile
+    exists: boolean;
+    lines: number; // 0 when missing
+    committed?: boolean;
+    gitignore?: boolean;
+    template: string; // starter content used to create the file
+    desc: string;
+}
+export interface GuidedMemoryModel {
+    slots: GuidedMemorySlot[];
+    imports: ImportNode[];
+    brokenCount: number;
+    auto: AutoMemory | null;
+    hasProject: boolean;
+}
+
 // ── Project context + snapshot ─────────────────────────────────────────────
 export interface ProjectInfo {
     name: string;
@@ -237,6 +315,7 @@ export interface RecentProject {
 export interface Snapshot {
     project: ProjectInfo | null;
     recents: RecentProject[];
+    projects: RecentProject[]; // known to ~/.claude.json, existing dirs only
     claudeVersion: string;
     counts: { keys: number; rules: number; servers: number; extensions: number };
     flags: { memoryWarn: boolean; scopeWarn: boolean };
@@ -247,6 +326,10 @@ export interface Snapshot {
     memory: MemoryModel;
     extensions: ExtensionsModel;
     guidedPermissions: GuidedPermissionsModel;
+    guidedModel: GuidedModelModel;
+    guidedEnv: GuidedEnvModel;
+    guidedMcp: GuidedMcpModel;
+    guidedMemory: GuidedMemoryModel;
     raw: RawModel;
 }
 
@@ -267,7 +350,21 @@ export type ChangeOp =
     | { kind: 'setDefaultMode'; mode: string; scope: ScopeId }
     | { kind: 'removeDefaultMode'; scope: ScopeId }
     | { kind: 'addRule'; beh: Behaviour; spec: string; scope: ScopeId }
-    | { kind: 'removeRule'; beh: Behaviour; spec: string; scope: ScopeId };
+    | { kind: 'removeRule'; beh: Behaviour; spec: string; scope: ScopeId }
+    // Reorder the rules of one behaviour within one scope's file. `specs` is the
+    // full desired order of that group's visible rules.
+    | { kind: 'reorderRules'; beh: Behaviour; scope: ScopeId; specs: string[] }
+    // Model & Effort: top-level scalar keys (model, effortLevel,
+    // alwaysThinkingEnabled, language) in a settings.json file.
+    | { kind: 'setScalar'; key: string; value: string | number | boolean; scope: ScopeId }
+    | { kind: 'removeScalar'; key: string; scope: ScopeId }
+    // Environment: entries of the `env` object in a settings.json file.
+    | { kind: 'setEnvVar'; name: string; value: string; scope: ScopeId }
+    | { kind: 'removeEnvVar'; name: string; scope: ScopeId }
+    // MCP: the `mcpServers` map — routed to .mcp.json (project) or
+    // ~/.claude.json (user / per-project local) by the write-target resolver.
+    | { kind: 'addMcpServer'; name: string; server: McpServerInput; scope: ScopeId }
+    | { kind: 'removeMcpServer'; name: string; scope: ScopeId };
 
 export interface WriteResult {
     ok: boolean;

@@ -117,7 +117,7 @@
   --scope-project: #2B7FFF;
   --scope-user: #00BC7D;
   --ok: #00BC7D;
-  --warn: #b9760a;
+  --warn: #FF8904;
   --err: #FB2C36;
   --info: #2B7FFF;
   --inert: #7a818a;
@@ -127,7 +127,7 @@
   --info-bg: rgba(47, 111, 224, .1);
   --inert-bg: rgba(122, 129, 138, .12);
   --deny: #FB2C36;
-  --ask: #b9760a;
+  --ask: #FF8904;
   --allow: #00BC7D;
   --shadow-pop: 0 12px 32px rgba(20, 22, 28, 0.16);
 }
@@ -339,7 +339,7 @@ code,
   height: 28px;
   padding: 0 10px;
   background: var(--surface-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--err);
   border-radius: var(--radius);
   color: var(--fg-muted);
   cursor: pointer;
@@ -351,9 +351,9 @@ code,
 }
 
 .tb-toggle.on {
-  background: var(--warn-bg);
-  border-color: color-mix(in oklab, var(--warn) 40%, transparent);
-  color: var(--warn);
+  background: var(--ok-bg);
+  border-color: color-mix(in oklab, var(--ok) 40%, transparent);
+  color: var(--fg);
 }
 
 .tb-toggle .sw {
@@ -378,7 +378,7 @@ code,
 }
 
 .tb-toggle.on .sw {
-  background: var(--warn);
+  background: var(--ok);
 }
 
 .tb-toggle.on .sw::after {
@@ -1090,7 +1090,7 @@ label.lbl {
 }
 
 .tbl .v.str {
-  color: #9cdca0;
+  color: var(--accent);
 }
 
 .tbl .ty {
