@@ -1,8 +1,8 @@
 name: Release
 
 # Triggered by pushing a version tag, e.g.:
-#   npm version patch        # bumps package.json + creates the tag
-#   git push --follow-tags
+# npm version patch # bumps package.json + creates the tag
+# git push --follow-tags
 #
 # Each matrix leg builds on its native runner (electron-builder can't
 # cross-compile native installers) and publishes its own artifacts to the
@@ -29,11 +29,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            platform: linux   # AppImage + deb + rpm, x64
+            platform: linux # AppImage + deb + rpm, x64
           - os: windows-latest
-            platform: win      # NSIS installer, x64
+            platform: win # NSIS installer, x64
           - os: macos-latest
-            platform: mac      # dmg, arm64 (Apple Silicon runner)
+            platform: mac # dmg, arm64 (Apple Silicon runner)
 
     runs-on: ${{ matrix.os }}
 
@@ -45,9 +45,12 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build & publish (${{ matrix.platform }})
         run: npm run build && npx electron-builder --${{ matrix.platform }} --publish always
