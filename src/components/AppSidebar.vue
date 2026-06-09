@@ -37,7 +37,7 @@ const NAV = computed<NavGroup[]>(() => {
                 { id: 'dashboard', label: 'Dashboard', to: '/dashboard', icon: 'grid', count: c.keys ? String(c.keys) : undefined },
                 { id: 'scope', label: 'Scope Stack', to: '/scope-stack', icon: 'layers', warn: f.scopeWarn },
                 { id: 'permissions', label: 'Permissions', to: '/permissions', icon: 'lock', count: c.rules ? String(c.rules) : undefined },
-                { id: 'mcp', label: 'MCP Servers', to: '/mcp', icon: 'db', count: c.servers ? String(c.servers) : undefined },
+                { id: 'mcp', label: 'MCP Servers', to: '/mcp', icon: 'server', count: c.servers ? String(c.servers) : undefined },
                 { id: 'memory', label: 'Memory', to: '/memory', icon: 'file', warn: f.memoryWarn },
                 { id: 'extensions', label: 'Extensions', to: '/extensions', icon: 'puzzle', count: c.extensions ? String(c.extensions) : undefined },
             ],
@@ -49,7 +49,7 @@ const NAV = computed<NavGroup[]>(() => {
                 { id: 'g-perm', label: 'Permissions', to: '/guided/permissions', icon: 'lock' },
                 { id: 'g-model', label: 'Model & Effort', to: '/guided/permissions', icon: 'sliders' },
                 { id: 'g-env', label: 'Environment', to: '/guided/permissions', icon: 'terminal' },
-                { id: 'g-mcp', label: 'MCP Servers', to: '/guided/permissions', icon: 'db' },
+                { id: 'g-mcp', label: 'MCP Servers', to: '/guided/permissions', icon: 'server' },
                 { id: 'g-mem', label: 'Memory', to: '/guided/permissions', icon: 'file' },
             ],
         },
@@ -73,7 +73,7 @@ const route = useRoute();
                 {{ g.group }}
             </div>
             <RouterLink v-for="it in g.items" :key="it.id" class="nav-item" :class="{ active: it.id === route.meta.navId }" :to="it.to">
-                <span class="ni-ico"><Icon :name="it.icon" :size="15" /></span>
+                <span class="ni-ico"><Icon :name="it.icon" :size="15" :variant="it.id === route.meta.navId ? 'solid' : 'light'" /></span>
                 {{ it.label }}
                 <span v-if="it.count" class="count">{{ it.count }}</span>
                 <span v-else-if="it.warn" class="warn-dot" title="needs attention"></span>

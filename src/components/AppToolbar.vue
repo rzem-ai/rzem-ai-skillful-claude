@@ -44,7 +44,9 @@ async function switchProject(): Promise<void> {
         <button class="proj-switch" title="Switch project" @click="switchProject">
             <span class="repo-dot"><Icon name="repo" :size="14" /></span>
             <span>{{ projectName }}</span>
+            <!--
             <span class="path">{{ projectPath }}</span>
+            -->
             <span class="chev"><Icon name="chevDown" :size="14" /></span>
         </button>
         <div class="tb-search">

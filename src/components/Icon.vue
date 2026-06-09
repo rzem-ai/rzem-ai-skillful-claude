@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { ICON_PATHS } from '@/lib/icons';
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
+import { resolveIcon, type IconName, type IconVariant } from '@/lib/icons';
 
-const props = withDefaults(defineProps<{ name: string; size?: number }>(), {
-    size: 16,
-});
+const props = withDefaults(
+    defineProps<{ name: IconName | string; size?: number; variant?: IconVariant }>(),
+    { size: 16, variant: 'light' },
+);
 
-const inner = computed(() => ICON_PATHS[props.name] ?? '');
+// Unknown names resolve to undefined and render nothing (matches the old behaviour).
+const icon = computed(() => resolveIcon(props.name, props.variant));
 </script>
 
 <template>
-    <svg :width="size" :height="size" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" v-html="inner" />
+    <FontAwesomeIcon v-if="icon" :icon="icon" :style="{ fontSize: size + 'px' }" fixed-width />
 </template>

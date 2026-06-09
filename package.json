@@ -11,6 +11,7 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "gen:icons": "node scripts/gen-icons-page.mjs",
     "package": "npm run build && electron-builder --publish=never",
     "package:linux": "npm run build && electron-builder --linux --publish=never",
     "package:mac": "npm run build && electron-builder --mac --publish=never",
@@ -19,6 +20,15 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.2.0",
+    "@fortawesome/free-brands-svg-icons": "^7.2.0",
+    "@fortawesome/free-regular-svg-icons": "^7.2.0",
+    "@fortawesome/free-solid-svg-icons": "^7.2.0",
+    "@fortawesome/pro-duotone-svg-icons": "^7.2.0",
+    "@fortawesome/pro-light-svg-icons": "^7.2.0",
+    "@fortawesome/pro-regular-svg-icons": "^7.2.0",
+    "@fortawesome/pro-solid-svg-icons": "^7.2.0",
+    "@fortawesome/vue-fontawesome": "^3.2.0",
     "@iconify/vue": "^5.0.0",
     "@primeuix/themes": "^2.0.3",
     "electron-log": "^5.2.0",
