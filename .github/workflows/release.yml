@@ -1,0 +1,59 @@
+name: Release
+
+# Triggered by pushing a version tag, e.g.:
+#   npm version patch        # bumps package.json + creates the tag
+#   git push --follow-tags
+#
+# Each matrix leg builds on its native runner (electron-builder can't
+# cross-compile native installers) and publishes its own artifacts to the
+# GitHub Release that matches package.json's version. electron-builder
+# finds-or-creates that release automatically from the `publish:` block in
+# electron-builder.yml — no separate "create release" step required.
+on:
+  push:
+    tags:
+      - "v*"
+  # Manual fallback: run from the Actions tab against any branch/tag.
+  workflow_dispatch:
+
+# electron-builder needs write access to create the release and upload assets.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      # Don't cancel macOS just because Windows failed — let every platform
+      # finish so you can see all the breakage at once.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux   # AppImage + deb + rpm, x64
+          - os: windows-latest
+            platform: win      # NSIS installer, x64
+          - os: macos-latest
+            platform: mac      # dmg, arm64 (Apple Silicon runner)
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & publish (${{ matrix.platform }})
+        run: npm run build && npx electron-builder --${{ matrix.platform }} --publish always
+        env:
+          # electron-builder reads this to talk to the GitHub Releases API.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No signing certs in CI — build unsigned instead of failing while
+          # hunting for a keychain identity (mac config sets hardenedRuntime).
+          CSC_IDENTITY_AUTO_DISCOVERY: false

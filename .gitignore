@@ -36,6 +36,7 @@ test-results
 .claude/
 
 # Code-signing material — never commit
+.cert/
 *.key
 *.pem
 *.p12
