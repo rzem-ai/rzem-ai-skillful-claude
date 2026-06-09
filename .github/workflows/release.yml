@@ -4,11 +4,14 @@ name: Release
 # npm version patch # bumps package.json + creates the tag
 # git push --follow-tags
 #
-# Each matrix leg builds on its native runner (electron-builder can't
+# Each platform builds on its native runner (electron-builder can't
 # cross-compile native installers) and publishes its own artifacts to the
 # GitHub Release that matches package.json's version. electron-builder
 # finds-or-creates that release automatically from the `publish:` block in
 # electron-builder.yml — no separate "create release" step required.
+#
+# The three jobs are independent and run in parallel — one platform failing
+# doesn't stop the others, and each can be rerun on its own from the Actions UI.
 on:
   push:
     tags:
@@ -21,22 +24,9 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    strategy:
-      # Don't cancel macOS just because Windows failed — let every platform
-      # finish so you can see all the breakage at once.
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux # AppImage + deb + rpm, x64
-          - os: windows-latest
-            platform: win # NSIS installer, x64
-          - os: macos-latest
-            platform: mac # dmg, arm64 (Apple Silicon runner)
-
-    runs-on: ${{ matrix.os }}
-
+  linux:
+    name: Build & publish (linux)
+    runs-on: ubuntu-latest # AppImage + deb + rpm, x64
     steps:
       - uses: actions/checkout@v4
 
@@ -58,8 +48,71 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build & publish (${{ matrix.platform }})
-        run: npm run build && npx electron-builder --${{ matrix.platform }} --publish always
+      - name: Build & publish (linux)
+        run: npm run build && npx electron-builder --linux --publish always
+        env:
+          # electron-builder reads this to talk to the GitHub Releases API.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  windows:
+    name: Build & publish (windows)
+    runs-on: windows-latest # NSIS installer, x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Create .npmrc
+        # Windows runners default to PowerShell, which can't parse the bash
+        # heredoc below — pin this step to Git Bash (preinstalled on the image).
+        shell: bash
+        run: |
+          cat > .npmrc <<EOF
+          @fortawesome:registry=https://npm.fontawesome.com/
+          @awesome.me:registry=https://npm.fontawesome.com/
+          //npm.fontawesome.com/:_authToken=${{ secrets.NPM_TOKEN }}
+          EOF
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & publish (windows)
+        run: npm run build && npx electron-builder --win --publish always
+        env:
+          # electron-builder reads this to talk to the GitHub Releases API.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  macos:
+    name: Build & publish (macos)
+    runs-on: macos-latest # dmg, arm64 (Apple Silicon runner)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Create .npmrc
+        run: |
+          cat > .npmrc <<EOF
+          @fortawesome:registry=https://npm.fontawesome.com/
+          @awesome.me:registry=https://npm.fontawesome.com/
+          //npm.fontawesome.com/:_authToken=${{ secrets.NPM_TOKEN }}
+          EOF
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & publish (macos)
+        run: npm run build && npx electron-builder --mac --publish always
         env:
           # electron-builder reads this to talk to the GitHub Releases API.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
