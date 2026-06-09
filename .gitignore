@@ -34,6 +34,12 @@ test-results
 
 # Per-user Claude Code settings
 .claude/
+# …except the engine test fixtures, which deliberately ship a .claude/ tree
+# as ground-truth input. Without these the Vitest engine suite fails on a
+# fresh checkout (CI). Re-include the dir *and* its contents (a file negation
+# alone is ignored while its parent dir stays excluded).
+!electron/main/engine/__fixtures__/**/.claude/
+!electron/main/engine/__fixtures__/**/.claude/**
 
 # Code-signing material — never commit
 .cert/

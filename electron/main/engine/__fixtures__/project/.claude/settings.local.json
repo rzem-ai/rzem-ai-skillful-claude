@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "defaultMode": "auto"
+  },
+  "outputStyle": "Explanatory",
+  "enabledPlugins": {
+    "formatter@team-tools": false
+  }
+}
