@@ -9,6 +9,9 @@
     "name": "rzem.ai",
     "url": "http://rzem.guru"
   },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "vue-tsc --noEmit -p tsconfig.web.json && electron-vite build",
