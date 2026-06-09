@@ -21,10 +21,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Create .npmrc
+        run: |
+          cat > .npmrc <<EOF
+          @fortawesome:registry=https://npm.fontawesome.com/
+          @awesome.me:registry=https://npm.fontawesome.com/
+          //npm.fontawesome.com/:_authToken=${{ secrets.NPM_TOKEN }}
+          EOF
 
       - name: Install dependencies
         run: npm ci
