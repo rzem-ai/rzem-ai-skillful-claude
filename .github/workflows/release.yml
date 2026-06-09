@@ -47,10 +47,16 @@ jobs:
           cache: npm
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Create .npmrc
+        run: |
+          cat > .npmrc <<EOF
+          @fortawesome:registry=https://npm.fontawesome.com/
+          @awesome.me:registry=https://npm.fontawesome.com/
+          //npm.fontawesome.com/:_authToken=${{ secrets.NPM_TOKEN }}
+          EOF
+
       - name: Install dependencies
         run: npm ci
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build & publish (${{ matrix.platform }})
         run: npm run build && npx electron-builder --${{ matrix.platform }} --publish always
