@@ -15,8 +15,9 @@ The UI was implemented from the design handoff in `design/design_prototype/`
 wired**: the main process reads real Claude Code config from disk, resolves it,
 and pushes a typed `Snapshot` to the renderer over the preload bridge. Every
 screen renders live data through a Pinia store (`src/stores/config.ts`); the
-inline fixtures are gone. Guided Permissions and the Raw Editor perform real
-writes (atomic write + timestamped backups). With no project selected, only
+inline fixtures are gone. The guided forms (Permissions, Model, Environment,
+MCP, Memory) and the Raw Editor perform real writes (atomic write + timestamped
+backups). With no project selected, only
 user/managed/global scopes resolve and screens fall back to empty states.
 
 See `README.md` for build/run commands. Automated checks: `npm run typecheck`
@@ -57,7 +58,8 @@ preload wrapper, and `api.d.ts` together.
   (`--t-cap|body|sec|view`), geometry, and layout dims. Light theme overrides
   live under `:root[data-theme="light"]`. **Style new components with these
   tokens and the existing classes — not hex literals, Tailwind, or PrimeVue.**
-- **`lib/icons.ts`** — the inline-SVG path set; **`components/Icon.vue`** renders
+- **`lib/icons.ts`** — the app's icon names mapped to Font Awesome 7 glyphs
+  (light default, solid for active states); **`components/Icon.vue`** renders
   `<Icon name="grid" :size="16" />`.
 - **`lib/scopes.ts`** + **`components/ProvenanceChip.vue`** — the signature
   component: scope color + icon + label, with an optional hover card.
@@ -77,10 +79,12 @@ preload wrapper, and `api.d.ts` together.
   `init()` once at boot.
 - **`views/`** — one component per screen: `DashboardView`, `ScopeStackView`,
   `PermissionsView`, `McpMapView`, `MemoryMapView`, `ExtensionsView`,
-  `GuidedPermissionsView`, `RawEditorView` (`OverviewView` exists but is
-  unrouted). Each pulls its data from the store and keeps screen-local
-  presentation logic + `<style scoped>`. Screen-local view-model types come from
-  `@shared/contract`.
+  `GuidedPermissionsView`, `GuidedModelView`, `GuidedEnvView`, `GuidedMcpView`,
+  `GuidedMemoryView`, `RawEditorView`. Each pulls its data from the store and
+  keeps screen-local presentation logic + `<style scoped>`. Screen-local
+  view-model types come from `@shared/contract`. The guided forms share the
+  write flow via `composables/useGuidedWrites.ts` + `GuidedApplyBar` +
+  `GuidedDiffModal`.
 
 ### Routing (`src/router/index.ts`)
 
@@ -97,9 +101,9 @@ highlight the active item.
   via `dirname(fileURLToPath(import.meta.url))` in the main process.
 - **Sandbox is off**: ESM preloads require `sandbox: false`; the renderer is
   still walled off via `contextIsolation: true` + `nodeIntegration: false`.
-- **Tailwind & PrimeVue are installed but unused** by these screens — the
-  prototype ships its own design system in `app.css`. Don't reach for them when
-  building Config screens; stay on the `app.css` tokens/classes.
+- **No CSS framework**: Tailwind and PrimeVue were removed in the v1 cleanup —
+  the app ships its own design system in `app.css`. Stay on the `app.css`
+  tokens/classes; don't reintroduce a framework.
 - **Real data via the engine**: every value on screen comes from the live
   `Snapshot` through the Pinia store. The engine (`electron/main/engine/`) is
   pure logic with exhaustive Vitest coverage against `docs/fixtures.md` — change

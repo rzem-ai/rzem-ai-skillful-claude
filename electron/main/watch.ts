@@ -61,6 +61,9 @@ export class ConfigWatcher {
             }
         }
         this.watchers = [];
-        if (this.timer) clearTimeout(this.timer);
+        if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = null;
+        }
     }
 }

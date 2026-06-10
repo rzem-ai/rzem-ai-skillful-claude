@@ -53,7 +53,7 @@ function vclass(t: string): string {
     );
 }
 function maskedValue(d: ConfigRow): string {
-    return d.chain[0]?.value ?? 'npm_••••••••••••';
+    return d.chain[0]?.value ?? '••••••••••••';
 }
 function toggleScope(s: ScopeId): void {
     activeScopes[s] = !activeScopes[s];
@@ -177,7 +177,8 @@ onMounted(() => {
                                     <span class="ty">{{ d.type }}</span>
                                 </td>
                                 <td>
-                                    <ProvenanceChip v-if="d.scope" :scope="d.scope" :path="d.chain[0].path" :meta="'Last modified ' + d.chain[0].mod" />
+                                    <ProvenanceChip v-if="d.scope && d.chain[0]" :scope="d.scope" :path="d.chain[0].path" :meta="'Last modified ' + d.chain[0].mod" />
+                                    <ProvenanceChip v-else-if="d.scope" :scope="d.scope" />
                                     <span v-else class="dim" style="font-size: 11px">none active</span>
                                 </td>
                                 <td>

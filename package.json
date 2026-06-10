@@ -1,7 +1,7 @@
 {
   "name": "rzem-ai-skillful-claude",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "out/main/index.js",
   "author": {
@@ -37,29 +37,22 @@
     "@fortawesome/pro-regular-svg-icons": "^7.2.0",
     "@fortawesome/pro-solid-svg-icons": "^7.2.0",
     "@fortawesome/vue-fontawesome": "^3.2.0",
-    "@iconify/vue": "^5.0.0",
-    "@primeuix/themes": "^2.0.3",
     "electron-log": "^5.2.0",
+    "monaco-editor": "^0.55.1",
     "pinia": "^3.0.4",
-    "primevue": "^4.5.4",
     "vue": "^3.5.13",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.101",
-    "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^22.10.0",
     "@vitejs/plugin-vue": "^5.2.1",
-    "autoprefixer": "^10.4.27",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^5.0.0",
-    "postcss": "^8.5.8",
-    "tailwindcss": "^4.2.2",
-    "tailwindcss-primeui": "^0.6.1",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
     "vitest": "^2.1.9",
     "vue-tsc": "^2.1.10"
-  }
+  },
+  "description": "What Claude Code configuration is actually in effect, and why — a desktop diagnostic for the five config scopes."
 }

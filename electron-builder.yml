@@ -32,11 +32,11 @@ publish:
 
 # ── Per-platform targets ───────────────────────────────────────────────
 
-# Platform icons were stripped with the v1 build assets — electron-builder
-# falls back to the default Electron icon. Drop a real icon set back under
-# build/ and re-add `icon:` keys per platform when branding the new version.
+# build/icon.png (1024×1024, rendered from build/icon.svg) is converted to
+# .icns/.ico automatically by electron-builder.
 
 linux:
+  icon: build/icon.png
   target:
     - target: AppImage
       arch:
@@ -50,18 +50,24 @@ linux:
   category: Development
 
 mac:
+  icon: build/icon.png
   target:
     - target: dmg
       arch:
         - arm64
+        - x64
   category: public.app-category.developer-tools
   hardenedRuntime: true
   gatekeeperAssess: false
-  notarize: true
+  # CI runs with CSC_IDENTITY_AUTO_DISCOVERY=false (no signing certs), so
+  # notarization cannot run. Flip to true once a Developer ID cert is wired
+  # into the release workflow.
+  notarize: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
 
 win:
+  icon: build/icon.png
   target:
     - target: nsis
       arch:

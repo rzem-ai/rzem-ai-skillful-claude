@@ -44,7 +44,7 @@ export function buildSnapshot(env: EngineEnv, recents: RecentProject[] = [], cla
     const guidedEnv = resolveGuidedEnv(dashboard, !!env.projectDir);
     const guidedMcp = resolveGuidedMcp(mcp, !!env.projectDir);
     const guidedMemory = resolveGuidedMemory(env, memory);
-    const raw = resolveRaw(src, permissions);
+    const raw = resolveRaw(src, permissions, env);
 
     const extCount = extensions.sections.reduce((n, s) => n + s.items.length, 0);
 

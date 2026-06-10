@@ -3,14 +3,17 @@
 // about: wrong-file keys, unreachable allow rules, masked secrets, parse
 // errors, and folded sensitive sections in ~/.claude.json.
 
+import { readFileSync, statSync } from 'node:fs';
+import { basename } from 'node:path';
 import type { PermissionsModel, RawFile, RawLine, RawModel, RawTreeGroup, ScopeId } from '../../shared/contract.js';
+import { type EngineEnv, displayPath, paths } from './env.js';
 import { GLOBAL_CONFIG_KEYS } from './keys.js';
 import { looksSecret, maskValue } from './secrets.js';
 import type { DiscoveredSources, SourceFile } from './sources.js';
 
 const FOLD_KEYS = ['oauthAccount', 'oauthCache', 'cachedChangelog', 'tipsHistory'];
 
-export function resolveRaw(src: DiscoveredSources, perms: PermissionsModel): RawModel {
+export function resolveRaw(src: DiscoveredSources, perms: PermissionsModel, env: EngineEnv): RawModel {
     const files: RawFile[] = [];
     const idFor = new Map<SourceFile, string>();
     let dropinSeq = 0;
@@ -50,6 +53,19 @@ export function resolveRaw(src: DiscoveredSources, perms: PermissionsModel): Raw
         files.push(buildRawFile(id, f, perms));
     }
 
+    // Memory markdown files — same targets the Guided Memory page edits, so
+    // its Edit buttons can deep-link here.
+    const p = paths(env);
+    const memSlots: Array<{ id: string; scope: ScopeId; abs: string | null; committed?: boolean }> = [
+        { id: 'mem-user', scope: 'user', abs: p.userMemory },
+        { id: 'mem-proj', scope: 'project', abs: p.projectMemory, committed: true },
+        { id: 'mem-local', scope: 'local', abs: p.localMemory },
+    ];
+    for (const m of memSlots) {
+        if (!m.abs || !isFile(m.abs)) continue;
+        files.push(buildMarkdownFile(m.id, m.scope, m.abs, env, m.committed));
+    }
+
     // Tree grouped by scope, preserving managed → local → project → user order.
     const order: ScopeId[] = ['managed', 'local', 'project', 'user'];
     const tree: RawTreeGroup[] = [];
@@ -59,6 +75,33 @@ export function resolveRaw(src: DiscoveredSources, perms: PermissionsModel): Raw
     }
 
     return { files, tree };
+}
+
+function isFile(path: string): boolean {
+    try {
+        return statSync(path).isFile();
+    } catch {
+        return false;
+    }
+}
+
+// Memory files are markdown: no JSON lints, no folding, no parse health —
+// plain lines rendered without the JSON colorizer.
+function buildMarkdownFile(id: string, scope: ScopeId, abs: string, env: EngineEnv, committed?: boolean): RawFile {
+    const text = readFileSync(abs, 'utf8');
+    return {
+        id,
+        scope,
+        realPath: abs,
+        path: displayPath(abs, env),
+        label: basename(abs),
+        health: 'ok',
+        committed,
+        locked: false,
+        markdown: true,
+        content: text,
+        lines: text.split('\n').map((t): RawLine => ({ t })),
+    };
 }
 
 function buildRawFile(id: string, f: SourceFile, perms: PermissionsModel): RawFile {
@@ -97,7 +140,7 @@ function buildLines(f: SourceFile, perms: PermissionsModel, isGlobal: boolean): 
     const rawLines = f.text.split('\n');
     const unreachableSpecs = perms.rules.filter((r) => r.unreachable).map((r) => ({ spec: r.spec, note: r.unreachable! }));
 
-    return rawLines.map((text) => {
+    return rawLines.map((text, idx) => {
         const line: RawLine = { t: text };
 
         // Folded sensitive sections in ~/.claude.json.
@@ -133,7 +176,7 @@ function buildLines(f: SourceFile, perms: PermissionsModel, isGlobal: boolean): 
         }
 
         // Parse-error line.
-        if (f.parseErr && rawLines.indexOf(text) + 1 === f.parseErr.line) {
+        if (f.parseErr && idx + 1 === f.parseErr.line) {
             line.g = 'err';
             line.lint = { type: 'err', msg: f.parseErr.message, action: 'Open docs' };
         }
@@ -143,7 +186,7 @@ function buildLines(f: SourceFile, perms: PermissionsModel, isGlobal: boolean): 
         if (sec && looksSecret(sec[1], sec[2])) {
             line.t = text.replace(sec[2], maskValue(sec[2]));
             line.g = 'warn';
-            line.lint = { type: 'warn', msg: 'Secret detected — masked by default. Reveal per-field; never written to diffs.', action: 'Reveal' };
+            line.lint = { type: 'warn', msg: 'Secret detected — masked in this view. The file on disk is unchanged.', action: '' };
         }
 
         return line;

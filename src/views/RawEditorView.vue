@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, defineAsyncComponent, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+// Monaco is ~8 MB of JS — load it on the first "Edit file" click, not at boot.
+const CodeEditor = defineAsyncComponent(() => import('@/components/CodeEditor.vue'));
+import GuidedDiffModal from '@/components/GuidedDiffModal.vue';
 import Icon from '@/components/Icon.vue';
 import ProvenanceChip from '@/components/ProvenanceChip.vue';
 import { toast } from '@/composables/useToast';
 import { useConfigStore } from '@/stores/config';
-import type { RawFile, RawHealth as Health, RawLine as Line } from '@shared/contract';
+import type { DiffLine, RawFile, RawHealth as Health, RawLine as Line } from '@shared/contract';
 
 type FileId = string;
 
@@ -26,17 +29,25 @@ function fileById(id: FileId): RawFile {
 }
 
 // ── JSON colorizer (line-level), ported from color() ──
+function escapeHtml(t: string): string {
+    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 function colorize(t: string): string {
-    return t
+    return escapeHtml(t)
         .replace(/("(?:[^"\\]|\\.)*")(\s*:)/g, '<span class="key">$1</span><span class="pun">$2</span>')
         .replace(/:\s*("(?:[^"\\]|\\.)*")/g, (_m, p1: string) => ': <span class="str">' + p1 + '</span>')
         .replace(/:\s*(true|false|null)/g, ': <span class="bool">$1</span>')
         .replace(/:\s*(-?\d+\.?\d*)/g, ': <span class="num">$1</span>')
         .replace(/([{}[\],])/g, '<span class="pun">$1</span>');
 }
+// Markdown memory files render plain — the JSON colorizer would mis-paint them.
+function renderLine(f: RawFile, t: string): string {
+    return f.markdown ? escapeHtml(t) : colorize(t);
+}
 
 // ── reactive state ──
 const route = useRoute();
+const router = useRouter();
 const curId = ref<FileId>('');
 const split = ref(route.query.key === 'defaultMode');
 const splitKey = 'defaultMode';
@@ -45,10 +56,59 @@ const splitKey = 'defaultMode';
 const SPLIT_LEFT = computed<FileId>(() => files.value.find((f) => f.scope === 'project' && f.label.includes('settings.json'))?.id ?? 'proj');
 const SPLIT_RIGHT = computed<FileId>(() => files.value.find((f) => f.scope === 'local')?.id ?? 'local');
 
-// Select a sensible default file once the snapshot loads.
+const curFile = computed(() => fileById(curId.value));
+
+// ── edit mode (Monaco) ──
+// Declared BEFORE the deep-link watcher below — it runs immediately during
+// setup and calls leaveEditOk(), so this state must already exist (TDZ).
+// View mode is the annotated, secret-masked lint view; Edit swaps the pane for
+// a real Monaco editor over the on-disk text. Saves go through the engine's
+// saveFile pipeline (allowlist + JSON validation + atomic write + backup).
+const editing = ref(false);
+const draft = ref('');
+const canEdit = computed(() => !split.value && !curFile.value.locked && !!curFile.value.realPath);
+const dirty = computed(() => editing.value && draft.value !== curFile.value.content);
+const draftJsonError = computed<string | null>(() => {
+    if (!editing.value || curFile.value.markdown) return null;
+    try {
+        JSON.parse(draft.value);
+        return null;
+    } catch (err) {
+        return err instanceof Error ? err.message : String(err);
+    }
+});
+function startEdit(): void {
+    draft.value = curFile.value.content;
+    editing.value = true;
+}
+function cancelEdit(): void {
+    editing.value = false;
+}
+function revertDraft(): void {
+    draft.value = curFile.value.content;
+}
+// Returns false (and stays put) if the user keeps unsaved changes.
+function leaveEditOk(): boolean {
+    if (!editing.value) return true;
+    if (dirty.value && !window.confirm('Discard unsaved changes?')) return false;
+    editing.value = false;
+    return true;
+}
+
+// Deep link (?file=<id>) wins — the Guided pages' Edit buttons land here.
+// Otherwise select a sensible default file once the snapshot loads.
 watch(
-    files,
-    (list) => {
+    [files, () => route.query.file],
+    ([list, qf]) => {
+        if (typeof qf === 'string' && qf && byId.value.has(qf)) {
+            if (!leaveEditOk()) return;
+            curId.value = qf;
+            split.value = false;
+            // One-shot: drop the query so watcher-driven reloads don't snap
+            // the selection back while the user browses other files.
+            void router.replace({ query: {} });
+            return;
+        }
         if (!curId.value || !byId.value.has(curId.value)) {
             curId.value = list.find((f) => f.scope === 'project')?.id ?? list[0]?.id ?? '';
         }
@@ -66,8 +126,6 @@ function healthCls(h: Health): string {
         : 'err'
     );
 }
-
-const curFile = computed(() => fileById(curId.value));
 
 // Numbered render rows: foldeds don't get a gutter number but DO consume a line
 // number (matching the prototype's n++ before the folded branch).
@@ -97,25 +155,36 @@ const splitBtnLabel = computed(() => (split.value ? 'Exit side-by-side' : 'Side-
 
 // ── interactions ──
 function openFile(id: FileId): void {
+    if (id !== curId.value && !leaveEditOk()) return;
     curId.value = id;
     split.value = false;
 }
 function toggleSplit(): void {
+    if (!leaveEditOk()) return;
     split.value = !split.value;
     if (split.value) curId.value = SPLIT_LEFT.value;
 }
-function lintAction(action: string): void {
-    toast(`“${action}” — guided fix opens`, 'sliders');
-}
+// Folded sensitive sections (~/.claude.json) can be revealed for the session.
+const foldsUnlocked = ref(false);
 function unlockFolded(): void {
-    toast('Sensitive section unlocked for this session', 'alert');
+    foldsUnlocked.value = true;
+    toast('Sensitive sections revealed for this session', 'alert');
 }
 
 // ── save bar (single-file) ──
-const saveBarOk = computed(() => curFile.value.health !== 'err');
+const saveBarCls = computed(() => {
+    if (editing.value) return draftJsonError.value ? 'err' : dirty.value ? 'warn' : 'ok';
+    return healthCls(curFile.value.health);
+});
 const saveBarStatus = computed(() => {
     const f = curFile.value;
-    if (!saveBarOk.value) return 'Invalid JSON — cannot save';
+    if (editing.value) {
+        if (f.markdown) return dirty.value ? 'Markdown · unsaved changes' : 'Markdown';
+        if (draftJsonError.value) return 'Invalid JSON — cannot save';
+        return dirty.value ? 'Valid JSON · unsaved changes' : 'Valid JSON';
+    }
+    if (f.markdown) return 'Markdown';
+    if (f.health === 'err') return 'Invalid JSON';
     return f.health === 'warn' ? 'Valid JSON · semantic warnings' : 'Valid JSON';
 });
 const saveBarMeta = computed(() => {
@@ -128,18 +197,29 @@ async function doSave(): Promise<void> {
         toast('This file is read-only.', 'alert');
         return;
     }
-    const res = await config.saveFile({ realPath: f.realPath, content: f.content });
+    if (draftJsonError.value) {
+        toast('Invalid JSON — fix it before saving', 'alert');
+        return;
+    }
+    const res = await config.saveFile({ realPath: f.realPath, content: draft.value });
     if (res.ok) toast(`Saved ${f.label}${res.backupPath ? ' · backup created' : ''}`, 'check');
     else toast(res.blocked ?? res.error ?? 'Save failed', 'alert');
 }
-function doRevert(): void {
-    void config.load();
-    toast('Reloaded from disk', 'check');
-}
 
 // ── diff modal (hero step 4) ──
+// The preview is computed by the engine for the real on-disk state — never
+// hardcoded — so what the user confirms is what actually happens.
 const diffOpen = ref(false);
-function openDiff(): void {
+const diffFileLines = ref<DiffLine[]>([]);
+const diffEffLines = ref<DiffLine[]>([]);
+async function openDiff(): Promise<void> {
+    const { preview, blocked } = await config.previewChange({ kind: 'removeDefaultMode', scope: 'project' });
+    if (blocked) {
+        toast(blocked, 'alert');
+        return;
+    }
+    diffFileLines.value = preview?.file.lines ?? [];
+    diffEffLines.value = preview?.effective ?? [];
     diffOpen.value = true;
 }
 function closeDiff(): void {
@@ -205,7 +285,7 @@ async function confirmDiff(): Promise<void> {
                                 </div>
                                 <div class="code">
                                     <template v-for="row in buildRows(SPLIT_LEFT, splitKey)" :key="row.n">
-                                        <div v-if="row.line.folded" class="folded">
+                                        <div v-if="row.line.folded && !foldsUnlocked" class="folded">
                                             <Icon name="lock" :size="12" />
                                             <span>{{ row.line.t.trim() }}</span>
                                             <span class="unlock" @click="unlockFolded">here be dragons — unlock</span>
@@ -221,7 +301,6 @@ async function confirmDiff(): Promise<void> {
                                             <div v-if="row.line.lint" class="lint-line" :class="row.line.lint.type">
                                                 <Icon :name="row.line.lint.type === 'err' ? 'xcircle' : 'alert'" :size="12" />
                                                 <span>{{ row.line.lint.msg }}</span>
-                                                <span class="la" @click="lintAction(row.line.lint.action)">{{ row.line.lint.action }}</span>
                                             </div>
                                         </template>
                                     </template>
@@ -245,7 +324,7 @@ async function confirmDiff(): Promise<void> {
                                 </div>
                                 <div class="code">
                                     <template v-for="row in buildRows(SPLIT_RIGHT, splitKey)" :key="row.n">
-                                        <div v-if="row.line.folded" class="folded">
+                                        <div v-if="row.line.folded && !foldsUnlocked" class="folded">
                                             <Icon name="lock" :size="12" />
                                             <span>{{ row.line.t.trim() }}</span>
                                             <span class="unlock" @click="unlockFolded">here be dragons — unlock</span>
@@ -261,7 +340,6 @@ async function confirmDiff(): Promise<void> {
                                             <div v-if="row.line.lint" class="lint-line" :class="row.line.lint.type">
                                                 <Icon :name="row.line.lint.type === 'err' ? 'xcircle' : 'alert'" :size="12" />
                                                 <span>{{ row.line.lint.msg }}</span>
-                                                <span class="la" @click="lintAction(row.line.lint.action)">{{ row.line.lint.action }}</span>
                                             </div>
                                         </template>
                                     </template>
@@ -280,16 +358,17 @@ async function confirmDiff(): Promise<void> {
                                         read-only
                                     </span>
                                 </div>
-                                <div v-if="curFile.parseErr" class="banner err" style="margin: 10px 12px 0">
+                                <div v-if="curFile.parseErr && !editing" class="banner err" style="margin: 10px 12px 0">
                                     <span class="b-ico"><Icon name="xcircle" :size="16" /></span>
                                     <div>
                                         <b>Parse error · line {{ curFile.parseErr.line }}.</b>
                                         {{ curFile.parseErr.msg }}
                                     </div>
                                 </div>
-                                <div class="code">
+                                <CodeEditor v-if="editing" v-model="draft" :language="curFile.markdown ? 'markdown' : 'json'" />
+                                <div v-else class="code">
                                     <template v-for="row in buildRows(curId)" :key="row.n">
-                                        <div v-if="row.line.folded" class="folded">
+                                        <div v-if="row.line.folded && !foldsUnlocked" class="folded">
                                             <Icon name="lock" :size="12" />
                                             <span>{{ row.line.t.trim() }}</span>
                                             <span class="unlock" @click="unlockFolded">here be dragons — unlock</span>
@@ -300,12 +379,11 @@ async function confirmDiff(): Promise<void> {
                                                     <Icon v-if="row.line.g" :name="row.line.g === 'err' ? 'xcircle' : 'alert'" :size="13" />
                                                 </span>
                                                 <span class="n">{{ row.n }}</span>
-                                                <span class="t" v-html="colorize(row.line.t)"></span>
+                                                <span class="t" v-html="renderLine(curFile, row.line.t)"></span>
                                             </div>
                                             <div v-if="row.line.lint" class="lint-line" :class="row.line.lint.type">
                                                 <Icon :name="row.line.lint.type === 'err' ? 'xcircle' : 'alert'" :size="12" />
                                                 <span>{{ row.line.lint.msg }}</span>
-                                                <span class="la" @click="lintAction(row.line.lint.action)">{{ row.line.lint.action }}</span>
                                             </div>
                                         </template>
                                     </template>
@@ -334,89 +412,34 @@ async function confirmDiff(): Promise<void> {
                             </div>
                         </template>
                         <template v-else>
-                            <div class="vstat health" :class="saveBarOk ? 'warn' : 'err'">
+                            <div class="vstat health" :class="saveBarCls">
                                 <span class="dot"></span>
                                 {{ saveBarStatus }}
                             </div>
                             <span class="hint">{{ saveBarMeta }}</span>
                             <div style="flex: 1"></div>
-                            <button class="btn sm" @click="doRevert">Revert</button>
-                            <button class="btn primary sm" :disabled="!saveBarOk" @click="doSave">
-                                <Icon name="check" :size="12" />
-                                Validate &amp; save
-                            </button>
+                            <template v-if="editing">
+                                <button class="btn sm" @click="cancelEdit">Cancel</button>
+                                <button class="btn sm" :disabled="!dirty" @click="revertDraft">Revert</button>
+                                <button class="btn primary sm" :disabled="!dirty || !!draftJsonError" @click="doSave">
+                                    <Icon name="check" :size="12" />
+                                    Validate &amp; save
+                                </button>
+                            </template>
+                            <template v-else>
+                                <button v-if="canEdit" class="btn primary sm" @click="startEdit">
+                                    <Icon name="code" :size="12" />
+                                    Edit file
+                                </button>
+                            </template>
                         </template>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- diff modal -->
-        <div class="scrim" :hidden="!diffOpen">
-            <div class="modal">
-                <div class="modal-h">
-                    <span style="color: var(--accent)"><Icon name="diff" :size="16" /></span>
-                    <h2>
-                        Delete project
-                        <code class="mono-v" style="font-size: 13px">defaultMode</code>
-                    </h2>
-                    <div style="flex: 1"></div>
-                    <button class="icon-btn" @click="closeDiff"><Icon name="xcircle" :size="16" /></button>
-                </div>
-                <div class="modal-b">
-                    <div class="diff-block">
-                        <div class="diff-h">
-                            <Icon name="file" :size="13" />
-                            File diff · .claude/settings.json
-                        </div>
-                        <div class="diff">
-                            <div class="ln">
-                                <span class="gut">…</span>
-                                <span class="txt">"permissions": {</span>
-                            </div>
-                            <div class="ln del">
-                                <span class="gut">-</span>
-                                <span class="txt">"defaultMode": "acceptEdits",</span>
-                            </div>
-                            <div class="ln">
-                                <span class="gut">…</span>
-                                <span class="txt">}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="diff-block thesis">
-                        <div class="diff-h">
-                            <Icon name="arrow" :size="13" />
-                            What actually changes · effective configuration
-                        </div>
-                        <div class="diff thesis">
-                            <div class="ln del">
-                                <span class="gut">-</span>
-                                <span class="txt">defaultMode = acceptEdits (was: Project)</span>
-                            </div>
-                            <div class="ln add">
-                                <span class="gut">+</span>
-                                <span class="txt">defaultMode = plan (now: User)</span>
-                            </div>
-                        </div>
-                        <div class="hint" style="margin-top: 7px">
-                            <Icon name="info" :size="12" />
-                            With the Project entry gone, the User value
-                            <code>plan</code>
-                            becomes effective. (Local
-                            <code>auto</code>
-                            stays ignored.)
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-f">
-                    <span class="hint">Atomic write · timestamped backup created</span>
-                    <div style="flex: 1"></div>
-                    <button class="btn" @click="closeDiff">Cancel</button>
-                    <button class="btn primary" @click="confirmDiff">Apply &amp; back up</button>
-                </div>
-            </div>
-        </div>
+        <!-- diff modal — lines come from the engine's live preview -->
+        <GuidedDiffModal :open="diffOpen" :file-lines="diffFileLines" :eff-lines="diffEffLines" @close="closeDiff" @confirm="confirmDiff" />
     </main>
 </template>
 
@@ -579,16 +602,16 @@ async function confirmDiff(): Promise<void> {
     background: var(--warn-bg);
 }
 .cl .t :deep(.key) {
-    color: #8fd0ff;
+    color: var(--syntax-key);
 }
 .cl .t :deep(.str) {
-    color: #9cdca0;
+    color: var(--syntax-str);
 }
 .cl .t :deep(.num) {
-    color: #e6b673;
+    color: var(--syntax-num);
 }
 .cl .t :deep(.bool) {
-    color: #c9a0ff;
+    color: var(--syntax-kw);
 }
 .cl .t :deep(.pun) {
     color: var(--fg-dim);

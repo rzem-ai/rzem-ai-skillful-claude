@@ -206,7 +206,7 @@ function openSource(): void {
     padding: 3px 0;
 }
 .envrow .vname {
-    color: #c9a0ff;
+    color: var(--syntax-kw);
 }
 .shadowed-def {
     margin: 10px 14px 0;

@@ -159,7 +159,7 @@ export function discoverSources(env: EngineEnv): DiscoveredSources {
         files.push(projectFile);
         localFile = buildFile('local', 'local', p.localSettings!, env, {
             writable: true,
-            gitignore: ignored('.claude/settings.local.json') || true,
+            gitignore: ignored('.claude/settings.local.json'),
         });
         files.push(localFile);
         projectMcpFile = buildFile('project-mcp', 'project', p.projectMcp!, env, { writable: true, committed: true });

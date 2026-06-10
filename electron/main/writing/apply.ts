@@ -4,6 +4,7 @@
 // file diff and the effective-config diff before anything touches disk.
 
 import { readFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import type { ApplyPreview, ChangeOp, DiffLine, McpServerInput, ScopeId, WriteResult } from '../../shared/contract.js';
 import { type EngineEnv, paths } from '../engine/env.js';
 import { discoverSources } from '../engine/sources.js';
@@ -343,10 +344,28 @@ export function applyChange(op: ChangeOp, env: EngineEnv, readOnly: boolean): Wr
     }
 }
 
+// The raw-save path takes a renderer-supplied absolute path, so it gets an
+// explicit allowlist: only the config files the engine itself surfaces may be
+// written. applyChange is safe without this — resolveWrite derives its target
+// from paths(env), never from the op payload.
+export function isAllowedWritePath(realPath: string, env: EngineEnv): boolean {
+    const abs = resolve(realPath);
+    if (abs.includes('\0')) return false;
+    const exactFiles = [
+        join(env.home, '.claude.json'),
+        env.projectDir ? join(env.projectDir, '.mcp.json') : null,
+        env.projectDir ? join(env.projectDir, 'CLAUDE.md') : null,
+        env.projectDir ? join(env.projectDir, 'CLAUDE.local.md') : null,
+    ].filter((x): x is string => !!x);
+    const dirs = [join(env.home, '.claude'), env.projectDir ? join(env.projectDir, '.claude') : null].filter((x): x is string => !!x);
+    return exactFiles.some((f) => abs === resolve(f)) || dirs.some((d) => abs.startsWith(resolve(d) + sep));
+}
+
 // Direct file save (Raw Editor). Validates JSON for .json files before writing.
-export function saveFile(realPath: string, content: string, readOnly: boolean): WriteResult {
+export function saveFile(realPath: string, content: string, readOnly: boolean, env: EngineEnv): WriteResult {
     if (readOnly) return { ok: false, blocked: 'Read-only mode is on — writes are disabled.' };
     if (!realPath) return { ok: false, blocked: 'This file is read-only.' };
+    if (!isAllowedWritePath(realPath, env)) return { ok: false, blocked: 'Refusing to write outside the Claude Code config files.' };
     if (realPath.endsWith('.json')) {
         try {
             JSON.parse(content);

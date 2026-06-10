@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- App icon: the scope stack. Five layers, one per config scope, in the
+       reserved scope colours from src/styles/app.css (managed wins on top,
+       user sits at the base). Dark squircle matches the app background. -->
+  <defs>
+    <clipPath id="squircle">
+      <rect x="100" y="100" width="824" height="824" rx="186"/>
+    </clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="#0b0b0d"/>
+  <g clip-path="url(#squircle)">
+    <rect x="100" y="100" width="824" height="824" rx="186" fill="none" stroke="#2a2c31" stroke-width="6"/>
+  </g>
+  <!-- stacked scope layers (isometric diamonds), user to managed, bottom-up -->
+  <g stroke-linejoin="round">
+    <path d="M512 788 226 646 512 504 798 646Z" fill="#00BC7D" opacity="0.96"/>
+    <path d="M512 700 226 558 512 416 798 558Z" fill="#2B7FFF" opacity="0.96"/>
+    <path d="M512 612 226 470 512 328 798 470Z" fill="#8E51FF" opacity="0.96"/>
+    <path d="M512 524 226 382 512 240 798 382Z" fill="#FE9A00" opacity="0.96"/>
+    <path d="M512 436 226 294 512 152 798 294Z" fill="#FB2C36"/>
+  </g>
+</svg>

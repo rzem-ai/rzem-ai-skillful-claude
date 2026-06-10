@@ -42,8 +42,10 @@ async function create(s: GuidedMemorySlot): Promise<void> {
     else toast(res.blocked ?? res.error ?? 'Could not create the file', 'alert');
 }
 
-function openInEditor(): void {
-    router.push('/raw');
+// The raw model exposes the same memory files under stable ids per scope.
+const RAW_ID: Record<string, string> = { user: 'mem-user', project: 'mem-proj', local: 'mem-local' };
+function openInEditor(scope: string): void {
+    void router.push({ path: '/raw', query: { file: RAW_ID[scope] ?? '' } });
 }
 </script>
 
@@ -86,7 +88,7 @@ function openInEditor(): void {
                                 <div class="s-state">
                                     <template v-if="s.exists">
                                         <span class="tag ok"><Icon name="check" :size="10" /> {{ s.lines }} lines</span>
-                                        <button class="btn sm" @click="openInEditor"><Icon name="code" :size="12" /> Edit</button>
+                                        <button class="btn sm" @click="openInEditor(s.scope)"><Icon name="code" :size="12" /> Edit</button>
                                     </template>
                                     <template v-else>
                                         <span class="tag inert">not created</span>

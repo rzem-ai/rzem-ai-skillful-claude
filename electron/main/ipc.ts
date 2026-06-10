@@ -3,6 +3,9 @@
 // change. Keep this list in lockstep with electron/shared/contract.ts (CH) and
 // the preload bridge.
 
+import { execFile } from 'node:child_process';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { CH, type ChangeOp, type SaveFileRequest, type Snapshot } from '../shared/contract.js';
 import { buildSnapshot } from './engine/index.js';
@@ -11,31 +14,57 @@ import { applyChange, previewChange, saveFile } from './writing/apply.js';
 import { currentProject, initProjectContext, recents, setProject } from './projectContext.js';
 import { ConfigWatcher } from './watch.js';
 
-let readOnly = false;
+// Must match the renderer store's initial state — the UI boots with the
+// read-only toggle ON and only syncs this over IPC when the user flips it.
+let readOnly = true;
 let watcher: ConfigWatcher | null = null;
 let handlersRegistered = false;
 
+// Detected lazily from the local CLI; empty until known. The sidebar falls
+// back to a plain "Claude Code" label, so an unknown version is never faked.
+let claudeVersion = process.env.CLAUDE_CODE_VERSION ?? '';
+
+function detectClaudeVersion(): void {
+    if (claudeVersion) return;
+    // Packaged GUI apps get a minimal PATH on macOS, so also try the common
+    // install location. First responder wins; failures leave version unknown.
+    const candidates = ['claude', join(homedir(), '.local', 'bin', 'claude')];
+    for (const bin of candidates) {
+        execFile(bin, ['--version'], { timeout: 3000 }, (err, stdout) => {
+            if (claudeVersion || err) return;
+            const m = /\d+(?:\.\d+)+/.exec(stdout);
+            if (m) claudeVersion = `Claude Code ${m[0]}`;
+        });
+    }
+}
+
 function snapshot(): Snapshot {
     const env = liveEnv(currentProject());
-    return buildSnapshot(env, recents(), detectClaudeVersion());
+    return buildSnapshot(env, recents(), claudeVersion);
 }
 
-function detectClaudeVersion(): string {
-    return process.env.CLAUDE_CODE_VERSION || 'Claude Code 2.1.x';
+// Handlers must not capture a BrowserWindow: on macOS the window is destroyed
+// and re-created on dock re-activate while ipcMain handlers live on.
+function anyWindow(): BrowserWindow | undefined {
+    return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
 }
 
-function restartWatcher(win: BrowserWindow): void {
+function broadcast(reason: string): void {
+    for (const w of BrowserWindow.getAllWindows()) {
+        if (!w.isDestroyed()) w.webContents.send(CH.onChange, { reason });
+    }
+}
+
+function restartWatcher(): void {
     watcher?.stop();
-    const env = liveEnv(currentProject());
-    watcher = new ConfigWatcher(env, (reason) => {
-        if (!win.isDestroyed()) win.webContents.send(CH.onChange, { reason });
-    });
+    watcher = new ConfigWatcher(liveEnv(currentProject()), broadcast);
     watcher.start();
 }
 
-export function registerIpc(win: BrowserWindow): void {
+export function registerIpc(): void {
     initProjectContext();
-    restartWatcher(win);
+    restartWatcher();
+    detectClaudeVersion();
 
     // Handlers are global to ipcMain; only attach them once even though a new
     // window (and watcher) may be created on macOS "activate".
@@ -45,21 +74,23 @@ export function registerIpc(win: BrowserWindow): void {
     ipcMain.handle(CH.snapshot, () => snapshot());
 
     ipcMain.handle(CH.setProject, (_e, path: string | null) => {
-        setProject(path);
-        restartWatcher(win);
+        setProject(typeof path === 'string' || path === null ? path : null);
+        restartWatcher();
         return snapshot();
     });
 
     ipcMain.handle(CH.pickProject, async () => {
-        const res = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Choose a project folder' });
+        const win = anyWindow();
+        const opts = { properties: ['openDirectory' as const], title: 'Choose a project folder' };
+        const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
         if (res.canceled || !res.filePaths[0]) return snapshot();
         setProject(res.filePaths[0]);
-        restartWatcher(win);
+        restartWatcher();
         return snapshot();
     });
 
     ipcMain.handle(CH.setReadOnly, (_e, value: boolean) => {
-        readOnly = value;
+        readOnly = value === true;
         return readOnly;
     });
 
@@ -67,9 +98,7 @@ export function registerIpc(win: BrowserWindow): void {
 
     ipcMain.handle(CH.applyChange, (_e, op: ChangeOp) => applyChange(op, liveEnv(currentProject()), readOnly));
 
-    ipcMain.handle(CH.saveFile, (_e, req: SaveFileRequest) => saveFile(req.realPath, req.content, readOnly));
-
-    ipcMain.handle(CH.revealSecret, (_e, _key: string) => ({ ok: true }));
+    ipcMain.handle(CH.saveFile, (_e, req: SaveFileRequest) => saveFile(req.realPath, req.content, readOnly, liveEnv(currentProject())));
 }
 
 export function disposeIpc(): void {

@@ -52,6 +52,10 @@ export const useConfigStore = defineStore('config', {
 
     actions: {
         async init() {
+            if (!window.api) {
+                this.error = 'Engine bridge unavailable — the renderer is running outside Electron.';
+                return;
+            }
             await this.load();
             if (!this.unsub) {
                 this.watching = true;
@@ -76,15 +80,27 @@ export const useConfigStore = defineStore('config', {
         },
 
         async pickProject() {
-            this.snapshot = await window.api.pickProject();
+            try {
+                this.snapshot = await window.api.pickProject();
+            } catch (err) {
+                this.error = err instanceof Error ? err.message : String(err);
+            }
         },
 
         async setProject(path: string | null) {
-            this.snapshot = await window.api.setProject(path);
+            try {
+                this.snapshot = await window.api.setProject(path);
+            } catch (err) {
+                this.error = err instanceof Error ? err.message : String(err);
+            }
         },
 
         async toggleReadOnly() {
-            this.readOnly = await window.api.setReadOnly(!this.readOnly);
+            try {
+                this.readOnly = await window.api.setReadOnly(!this.readOnly);
+            } catch (err) {
+                this.error = err instanceof Error ? err.message : String(err);
+            }
             return this.readOnly;
         },
 

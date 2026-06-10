@@ -65,6 +65,12 @@
   --ask: #FE9A00;
   --allow: #00BC7D;
 
+  /* JSON syntax colours (Raw Editor) */
+  --syntax-key: #8fd0ff;
+  --syntax-str: #9cdca0;
+  --syntax-num: #e6b673;
+  --syntax-kw: #c9a0ff;
+
   /* Type */
   --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
   --mono: "SF Mono", "JetBrains Mono", "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -129,6 +135,10 @@
   --deny: #FB2C36;
   --ask: #FF8904;
   --allow: #00BC7D;
+  --syntax-key: #0e6fc0;
+  --syntax-str: #18804a;
+  --syntax-num: #ad5f00;
+  --syntax-kw: #7a3fd4;
   --shadow-pop: 0 12px 32px rgba(20, 22, 28, 0.16);
 }
 

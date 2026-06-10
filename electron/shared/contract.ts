@@ -195,6 +195,7 @@ export interface RawFile {
     gitignore?: boolean;
     locked?: boolean;
     dragons?: boolean;
+    markdown?: boolean; // memory .md file — render plain, no JSON colorizer/lints
     parseErr?: { line: number; msg: string };
     content: string; // raw file text (for editing); '' for synthetic
     lines: RawLine[];
@@ -388,12 +389,9 @@ export const CH = {
     snapshot: 'config:snapshot',
     setProject: 'config:setProject',
     pickProject: 'config:pickProject',
-    revealSecret: 'config:revealSecret',
     previewChange: 'write:previewChange',
     applyChange: 'write:applyChange',
-    previewSave: 'write:previewSave',
     saveFile: 'write:saveFile',
-    restoreBackup: 'write:restoreBackup',
     setReadOnly: 'config:setReadOnly',
     onChange: 'config:onChange', // main → renderer push
 } as const;

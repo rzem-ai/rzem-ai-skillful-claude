@@ -5,9 +5,10 @@ a dark-first, dense diagnostic instrument that answers *"what configuration is
 actually in effect, and why?"* across the five config scopes (Managed › CLI ›
 Local › Project › User).
 
-All eight screens (Dashboard, Scope Stack, Permissions, MCP Map, Memory Map,
-Extensions, Guided Permissions, Raw Editor) are implemented from the design
-handoff in [`design/design_prototype/`](./design/design_prototype) and render
+All twelve screens (Dashboard, Scope Stack, Permissions, MCP Map, Memory Map,
+Extensions, Guided Permissions/Model/Environment/MCP/Memory, Raw Editor) are
+implemented from the design handoff in
+[`design/design_prototype/`](./design/design_prototype) and render
 **live data from a real config engine**. The main process discovers and parses
 every Claude Code config file, replicates Claude Code's precedence
 (scalar override, array merge, the v2.1.142 auto-mode rule, global-config-key

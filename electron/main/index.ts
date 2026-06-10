@@ -1,4 +1,5 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, dialog, Menu, shell, type MenuItemConstructorOptions } from 'electron';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
@@ -15,12 +16,81 @@ log.initialize();
 log.transports.file.level = 'info';
 log.transports.console.level = 'debug';
 
+// Last-resort handlers: without these a main-process throw kills the app with
+// no trace in the log file.
+process.on('uncaughtException', (err) => log.error('uncaughtException', err));
+process.on('unhandledRejection', (reason) => log.error('unhandledRejection', reason));
+
 let mainWindow: BrowserWindow | null = null;
 
+// ── Window-state persistence ────────────────────────────────────────────────
+interface WindowState {
+    width: number;
+    height: number;
+    x?: number;
+    y?: number;
+}
+const stateFile = () => join(app.getPath('userData'), 'window-state.json');
+
+function loadWindowState(): WindowState {
+    try {
+        const s = JSON.parse(readFileSync(stateFile(), 'utf8')) as WindowState;
+        if (typeof s.width === 'number' && typeof s.height === 'number') return s;
+    } catch {
+        /* first run or corrupt state — fall back to defaults */
+    }
+    return { width: 1280, height: 800 };
+}
+
+function saveWindowState(win: BrowserWindow): void {
+    try {
+        if (win.isMinimized() || win.isFullScreen()) return;
+        writeFileSync(stateFile(), JSON.stringify(win.getBounds()));
+    } catch (err) {
+        log.warn('failed to save window state', err);
+    }
+}
+
+// ── Application menu ────────────────────────────────────────────────────────
+const REPO_URL = 'https://github.com/rzem-ai/rzem-ai-skillful-claude';
+
+function buildMenu(): void {
+    const isMac = process.platform === 'darwin';
+    const template: MenuItemConstructorOptions[] = [
+        ...(isMac ? [{ role: 'appMenu' as const }] : []),
+        { role: 'fileMenu' },
+        { role: 'editMenu' },
+        { role: 'viewMenu' },
+        { role: 'windowMenu' },
+        {
+            role: 'help',
+            submenu: [
+                { label: 'Skillful Claude on GitHub', click: () => void shell.openExternal(REPO_URL) },
+                ...(isMac ? [] : [
+                    { type: 'separator' as const },
+                    {
+                        label: 'About Skillful Claude',
+                        click: () =>
+                            void dialog.showMessageBox({
+                                title: 'About Skillful Claude',
+                                message: 'Skillful Claude',
+                                detail: `Version ${app.getVersion()}\nWhat Claude Code configuration is actually in effect, and why.\n© ${new Date().getFullYear()} rzem.ai`,
+                            }),
+                    },
+                ]),
+            ],
+        },
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow(): void {
+    const state = loadWindowState();
     mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 800,
+        width: state.width,
+        height: state.height,
+        x: state.x,
+        y: state.y,
         minWidth: 960,
         minHeight: 640,
         title: 'Skillful Claude',
@@ -40,9 +110,12 @@ function createWindow(): void {
     mainWindow.once('ready-to-show', () => {
         mainWindow?.show();
     });
+    mainWindow.on('close', () => {
+        if (mainWindow) saveWindowState(mainWindow);
+    });
 
     // Wire the config engine + write pipeline to the renderer.
-    registerIpc(mainWindow);
+    registerIpc();
 
     // External links open in the user's browser, not a new Electron window.
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -62,9 +135,15 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-    // IPC handlers and the auto-updater were stripped with the v1 features.
-    // Register new ipcMain.handle(...) channels here as the rebuild adds
-    // them, and expose matching wrappers in electron/preload/index.ts.
+    if (process.platform === 'darwin') {
+        app.setAboutPanelOptions({
+            applicationName: 'Skillful Claude',
+            applicationVersion: app.getVersion(),
+            copyright: `© ${new Date().getFullYear()} rzem.ai`,
+            credits: 'What Claude Code configuration is actually in effect, and why.',
+        });
+    }
+    buildMenu();
     createWindow();
 
     app.on('activate', () => {

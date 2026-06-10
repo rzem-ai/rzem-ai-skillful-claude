@@ -227,3 +227,29 @@ describe('no project selected', () => {
         expect(snap.dashboard.find((r) => r.key === 'model')!.value).toBe('claude-opus-4-7');
     });
 });
+
+describe('raw editor model — memory files', () => {
+    it('includes the three memory markdown files with stable ids', () => {
+        const raw = buildSnapshot(env()).raw;
+        const ids = raw.files.map((f) => f.id);
+        expect(ids).toContain('mem-user');
+        expect(ids).toContain('mem-proj');
+        expect(ids).toContain('mem-local');
+        const memUser = raw.files.find((f) => f.id === 'mem-user')!;
+        expect(memUser.markdown).toBe(true);
+        expect(memUser.locked).toBe(false);
+        expect(memUser.realPath.endsWith('.claude/CLAUDE.md')).toBe(true);
+        expect(memUser.lines.length).toBeGreaterThan(0);
+        // memory ids appear in the scope-grouped tree so the file list shows them
+        const userGroup = raw.tree.find((g) => g.scope === 'user')!;
+        expect(userGroup.ids).toContain('mem-user');
+    });
+
+    it('omits project/local memory when no project is selected', () => {
+        const raw = buildSnapshot({ ...env(), projectDir: null }).raw;
+        const ids = raw.files.map((f) => f.id);
+        expect(ids).toContain('mem-user');
+        expect(ids).not.toContain('mem-proj');
+        expect(ids).not.toContain('mem-local');
+    });
+});
