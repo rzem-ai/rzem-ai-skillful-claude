@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+//import { useRouter } from 'vue-router';
 import Icon from '@/components/Icon.vue';
 import { useTheme } from '@/composables/useTheme';
 import { toast } from '@/composables/useToast';
@@ -9,11 +9,11 @@ import { useConfigStore } from '@/stores/config';
 // Top chrome: window traffic lights, project switcher, global search,
 // file-watcher heartbeat, read-only toggle, theme toggle. Search field is
 // exposed for ⌘K focus. Project + sync state come from the engine store.
-const router = useRouter();
+//const router = useRouter();
 const { theme, toggle: toggleTheme } = useTheme();
 const config = useConfigStore();
 
-const search = ref('');
+//const search = ref('');
 const searchEl = ref<HTMLInputElement | null>(null);
 
 const projectName = computed(() => config.project?.name ?? 'No project');
@@ -26,11 +26,11 @@ const menuOpen = ref(false);
 
 defineExpose({ focusSearch: () => searchEl.value?.focus() });
 
-function onSearch(e: KeyboardEvent): void {
-    if (e.key === 'Enter' && search.value.trim()) {
-        router.push({ path: '/dashboard', query: { q: search.value.trim() } });
-    }
-}
+// function onSearch(e: KeyboardEvent): void {
+//     if (e.key === 'Enter' && search.value.trim()) {
+//         router.push({ path: '/dashboard', query: { q: search.value.trim() } });
+//     }
+// }
 
 async function toggleReadOnly(): Promise<void> {
     const on = await config.toggleReadOnly();
