@@ -83,11 +83,13 @@ async function chooseFolder(): Promise<void> {
                 </div>
             </div>
         </div>
+        <!--
         <div class="tb-search">
             <span><Icon name="search" :size="15" /></span>
             <input ref="searchEl" v-model="search" type="text" placeholder="Search keys, rules, files, servers…" @keydown="onSearch" />
             <kbd>⌘K</kbd>
         </div>
+        -->
         <div class="tb-spacer"></div>
         <div class="sync" title="File watcher heartbeat">
             <span class="pulse"></span>
