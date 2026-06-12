@@ -82,7 +82,7 @@ const route = useRoute();
         <div class="grow"></div>
         <div class="side-foot">
             <Icon name="info" :size="13" />
-            <span>{{ claudeVersion }} · engine live</span>
+            <span>{{ claudeVersion }}</span>
         </div>
     </nav>
 </template>

@@ -1,0 +1,65 @@
+/* ============================================================================
+   Tailwind v4 token bridge
+   ----------------------------------------------------------------------------
+   Wires Tailwind utilities to Skillful Claude's existing design tokens so the
+   utility layer and `app.css` share ONE source of truth. Utilities like
+   `bg-surface-2`, `text-fg-muted`, `border-border`, `text-scope-user` resolve
+   to the same `var(--…)` custom properties `app.css` defines — which already
+   flip under `:root[data-theme="light"]`, so utilities inherit theming for free.
+
+   Preflight (Tailwind's base reset) is intentionally OMITTED: we import only the
+   `theme` and `utilities` layers, not `base`. The app ships its own resets in
+   `app.css`, and Preflight would clobber heading/button/list styling. `app.css`
+   rules are unlayered, so they keep priority over these layered utilities —
+   coexistence is safe.
+   ============================================================================ */
+
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+  /* Neutral surfaces */
+  --color-bg: var(--bg);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+  --color-overlay: var(--overlay);
+
+  /* Text */
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-dim: var(--fg-dim);
+  --color-fg-faint: var(--fg-faint);
+
+  /* Hairlines + chrome accent */
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+
+  /* Scope colors — reserved; carry meaning */
+  --color-scope-managed: var(--scope-managed);
+  --color-scope-cli: var(--scope-cli);
+  --color-scope-local: var(--scope-local);
+  --color-scope-project: var(--scope-project);
+  --color-scope-user: var(--scope-user);
+
+  /* Semantic state */
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-err: var(--err);
+  --color-info: var(--info);
+  --color-inert: var(--inert);
+
+  /* Type */
+  --font-sans: var(--ui);
+  --font-mono: var(--mono);
+
+  /* Radius */
+  --radius-sm: var(--radius-sm);
+  --radius: var(--radius);
+  --radius-lg: var(--radius-lg);
+}

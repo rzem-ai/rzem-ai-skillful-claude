@@ -56,8 +56,12 @@ preload wrapper, and `api.d.ts` together.
   accent (`--accent`, teal — chrome only), the five reserved **scope colors**
   (`--scope-managed|cli|local|project|user`), semantic state colors, type scale
   (`--t-cap|body|sec|view`), geometry, and layout dims. Light theme overrides
-  live under `:root[data-theme="light"]`. **Style new components with these
-  tokens and the existing classes — not hex literals, Tailwind, or PrimeVue.**
+  live under `:root[data-theme="light"]`. These tokens are bridged into Tailwind
+  v4 via `@theme` in `src/styles/tailwind.css`, so utilities (`bg-surface-2`,
+  `text-fg-muted`, `text-scope-user`) resolve to the same variables and inherit
+  theme switching for free. **Style new components with Tailwind utilities bound
+  to these tokens (or the existing `app.css` classes) — never hex literals,
+  Tailwind's default palette, or another UI framework like PrimeVue.**
 - **`lib/icons.ts`** — the app's icon names mapped to Font Awesome 7 glyphs
   (light default, solid for active states); **`components/Icon.vue`** renders
   `<Icon name="grid" :size="16" />`.
@@ -101,9 +105,23 @@ highlight the active item.
   via `dirname(fileURLToPath(import.meta.url))` in the main process.
 - **Sandbox is off**: ESM preloads require `sandbox: false`; the renderer is
   still walled off via `contextIsolation: true` + `nodeIntegration: false`.
-- **No CSS framework**: Tailwind and PrimeVue were removed in the v1 cleanup —
-  the app ships its own design system in `app.css`. Stay on the `app.css`
-  tokens/classes; don't reintroduce a framework.
+- **Styling — Tailwind v4 + the `app.css` design system, token-bridged**:
+  PrimeVue is gone, but Tailwind v4 was (re)introduced and is now the
+  **Tailwind-first** default for new view code. It's wired via the
+  `@tailwindcss/vite` plugin (renderer block of `electron.vite.config.ts`); there
+  is no `postcss.config`, `autoprefixer`, or `tailwind.config.js` — config lives
+  in CSS. `src/styles/tailwind.css` imports Tailwind (**Preflight deliberately
+  omitted** — only the `theme` + `utilities` layers, so Tailwind's reset doesn't
+  clobber the app's own base styles) and bridges every design token into `@theme`.
+  It's imported before `app.css` in `main.ts`. The hand-built `app.css`
+  component classes (`.btn`, `.chip`, `.tbl`, `.insp-*`, …) still exist and are
+  being migrated to utilities/`@apply` incrementally (`DashboardView.vue` is the
+  converted reference). Two gotchas: `app.css` rules are **unlayered**, so they
+  win over layered Tailwind utilities — a utility can't override a property an
+  `app.css` class already sets on the same element (recolor in scoped CSS or
+  migrate the class instead); and because Preflight is off, border utilities need
+  an explicit `border-solid`. Stay on the bridged tokens — no hex literals or
+  Tailwind default-palette colors.
 - **Real data via the engine**: every value on screen comes from the live
   `Snapshot` through the Pinia store. The engine (`electron/main/engine/`) is
   pure logic with exhaustive Vitest coverage against `docs/fixtures.md` — change

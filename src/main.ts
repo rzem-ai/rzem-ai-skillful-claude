@@ -6,6 +6,7 @@ import '@fortawesome/fontawesome-svg-core/styles.css';
 import App from './App.vue';
 import { router } from './router';
 import { initTheme } from './composables/useTheme';
+import './styles/tailwind.css';
 import './styles/app.css';
 
 // Ship Font Awesome's CSS via the bundler instead of letting the core inject it

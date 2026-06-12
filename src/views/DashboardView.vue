@@ -109,15 +109,20 @@ onMounted(() => {
                 <div class="spacer"></div>
                 <button class="btn ghost sm" @click="selectKey('permissions.defaultMode')">
                     Resolved keys:
-                    <b style="margin-left: 4px">{{ DATA.length }}</b>
+                    <b class="ml-1">{{ DATA.length }}</b>
                 </button>
             </div>
 
             <div class="view-body">
-                <div class="filters">
-                    <input v-model="search" class="field" type="text" placeholder="Filter keys…" style="width: 240px" />
-                    <div class="scope-filter">
-                        <span v-for="s in SCOPE_FILTERS" :key="s" class="sf" :class="{ off: !activeScopes[s] }" @click="toggleScope(s)">
+                <div class="flex items-center gap-2 flex-wrap mb-3">
+                    <input v-model="search" class="field w-60" type="text" placeholder="Filter keys…" />
+                    <div class="inline-flex items-center gap-1">
+                        <span
+                            v-for="s in SCOPE_FILTERS"
+                            :key="s"
+                            class="cursor-pointer select-none"
+                            :class="{ 'opacity-[0.32] grayscale-[50%]': !activeScopes[s] }"
+                            @click="toggleScope(s)">
                             <ProvenanceChip :scope="s" />
                         </span>
                     </div>
@@ -138,36 +143,36 @@ onMounted(() => {
                         <input v-model="onlyConflict" type="checkbox" />
                         Has conflicts
                     </label>
-                    <span class="count-pill">{{ rows.length }} of {{ DATA.length }} keys</span>
+                    <span class="ml-auto font-mono text-[11px]/[1] text-fg-dim">{{ rows.length }} of {{ DATA.length }} keys</span>
                 </div>
 
-                <div class="card" style="overflow: hidden">
+                <div class="card overflow-hidden">
                     <table class="tbl">
                         <thead>
                             <tr>
-                                <th style="width: 30%">Key</th>
-                                <th style="width: 26%">Resolved value</th>
-                                <th style="width: 84px">Type</th>
-                                <th style="width: 130px">Provenance</th>
+                                <th class="w-[30%]">Key</th>
+                                <th class="w-[26%]">Resolved value</th>
+                                <th class="w-[84px]">Type</th>
+                                <th class="w-[130px]">Provenance</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-if="!rows.length">
-                                <td colspan="5" class="dim" style="padding: 22px 14px; text-align: center; font-size: 12px">
+                                <td colspan="5" class="dim text-center py-[22px] px-3.5 text-xs">
                                     {{ config.loading ? 'Resolving configuration…' : 'No configuration keys in effect for the active scopes.' }}
                                 </td>
                             </tr>
                             <tr v-for="d in rows" :key="d.key" :class="{ sel: d.key === selectedKey }" @click="selectKey(d.key)">
                                 <td>
                                     <span class="k">{{ d.key }}</span>
-                                    <span v-if="d.lint" class="lint-i" :title="d.lint"><Icon name="alert" :size="13" /></span>
+                                    <span v-if="d.lint" class="text-warn inline-flex align-[-2px] ml-1.5" :title="d.lint"><Icon name="alert" :size="13" /></span>
                                 </td>
                                 <td>
                                     <span v-if="d.inert" class="dim mono-v">—</span>
-                                    <span v-else-if="d.secret" class="secret">
+                                    <span v-else-if="d.secret" class="inline-flex items-center gap-2">
                                         <span class="v str">{{ revealed[d.key] ? d.value : maskedValue(d) }}</span>
-                                        <span class="reveal" title="Reveal value" @click.stop="revealed[d.key] = !revealed[d.key]">
+                                        <span class="flex cursor-pointer text-fg-dim hover:text-accent" title="Reveal value" @click.stop="revealed[d.key] = !revealed[d.key]">
                                             <Icon :name="revealed[d.key] ? 'eye' : 'eyeoff'" :size="13" />
                                         </span>
                                     </span>
@@ -179,7 +184,7 @@ onMounted(() => {
                                 <td>
                                     <ProvenanceChip v-if="d.scope && d.chain[0]" :scope="d.scope" :path="d.chain[0].path" :meta="'Last modified ' + d.chain[0].mod" />
                                     <ProvenanceChip v-else-if="d.scope" :scope="d.scope" />
-                                    <span v-else class="dim" style="font-size: 11px">none active</span>
+                                    <span v-else class="dim text-[11px]">none active</span>
                                 </td>
                                 <td>
                                     <span v-if="d.locked" class="tag lock">
@@ -202,7 +207,7 @@ onMounted(() => {
                                         <Icon name="layers" :size="12" />
                                         Shadows {{ d.chain.length - 1 }}
                                     </span>
-                                    <span v-else class="dim" style="font-size: 11px">—</span>
+                                    <span v-else class="dim text-[11px]">—</span>
                                 </td>
                             </tr>
                         </tbody>
@@ -224,8 +229,8 @@ onMounted(() => {
                 <div class="insp-b">
                     <div class="insp-sec">
                         <h4>Effective value</h4>
-                        <div class="row gap-sm" style="align-items: baseline">
-                            <span class="mono-v" style="font-size: 14px; font-weight: 600">{{ selected.inert ? '—' : selected.value }}</span>
+                        <div class="flex items-baseline gap-1.5">
+                            <span class="font-mono text-sm font-semibold">{{ selected.inert ? '—' : selected.value }}</span>
                             <span class="ty">{{ selected.type }}</span>
                             <ProvenanceChip v-if="selected.scope" :scope="selected.scope" />
                         </div>
@@ -270,12 +275,12 @@ onMounted(() => {
                                         <span v-if="c.status === 'winner'" class="win-pill">winner</span>
                                         <span v-else-if="c.status === 'ignored'" class="ignored-pill">ignored by rule</span>
                                     </div>
-                                    <div class="cm-note dim" style="margin-top: 5px">{{ c.path }} · {{ c.mod }}</div>
+                                    <div class="cm-note dim mt-[5px]">{{ c.path }} · {{ c.mod }}</div>
                                     <div v-if="c.note" class="cm-note" :class="{ warn: c.status === 'ignored' }">
                                         <Icon v-if="c.status === 'ignored'" name="alert" :size="13" />
                                         <span>{{ c.note }}</span>
                                     </div>
-                                    <div v-if="c.action" style="margin-top: 7px">
+                                    <div v-if="c.action" class="mt-[7px]">
                                         <button class="btn sm" @click="chainAction(c.action)">
                                             {{ c.action }}
                                             <Icon name="arrow" :size="12" />
@@ -288,11 +293,11 @@ onMounted(() => {
 
                     <div class="insp-sec">
                         <h4>Why this value</h4>
-                        <p class="hint" style="line-height: 1.5">{{ whyText(selected) }}</p>
+                        <p class="hint leading-normal">{{ whyText(selected) }}</p>
                     </div>
                 </div>
 
-                <div v-if="!selected.locked" class="insp-actions">
+                <div v-if="!selected.locked" class="flex gap-2 px-3.5 py-3 border-t border-solid border-border">
                     <RouterLink v-if="selected.hero" class="btn primary sm" to="/raw">
                         <Icon name="compare" :size="13" />
                         Open side-by-side
@@ -312,57 +317,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.filters {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 12px;
-}
-.scope-filter {
-    display: inline-flex;
-    gap: 4px;
-    align-items: center;
-}
-.sf {
-    cursor: pointer;
-    user-select: none;
-}
-.sf.off {
-    opacity: 0.32;
-    filter: grayscale(0.5);
-}
-.count-pill {
-    font: 11px/1 var(--mono);
-    color: var(--fg-dim);
-    margin-left: auto;
-}
-td .secret {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-}
-td .reveal {
-    color: var(--fg-dim);
-    cursor: pointer;
-    display: flex;
-}
-td .reveal:hover {
-    color: var(--accent);
-}
-.lint-i {
-    color: var(--warn);
-    display: inline-flex;
-    vertical-align: -2px;
-    margin-left: 6px;
-}
+/* Kept as a scoped rule, not a utility: `.ignored-i` recolors the shared
+   `.tbl .shadow-i` badge. That shared class is unlayered, so a layered Tailwind
+   `text-warn` utility can't win against it — this override has to stay in CSS
+   until the table-status badges themselves migrate. */
 .ignored-i {
     color: var(--warn);
-}
-.insp-actions {
-    display: flex;
-    gap: 8px;
-    padding: 12px 14px;
-    border-top: 1px solid var(--border);
 }
 </style>

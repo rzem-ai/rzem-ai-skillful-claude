@@ -1,5 +1,6 @@
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import vue from "@vitejs/plugin-vue";
+import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
 import { resolve } from "node:path";
 
@@ -38,7 +39,7 @@ export default defineConfig({
   },
   renderer: {
     root: ".",
-    plugins: [vue()],
+    plugins: [vue(), tailwindcss()],
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
