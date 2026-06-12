@@ -44,15 +44,17 @@
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
     "@types/node": "^22.10.0",
-    "@vitejs/plugin-vue": "^5.2.1",
+    "@vitejs/plugin-vue": "^6.0.7",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^5.0.0",
-    "typescript": "~5.6.2",
-    "vite": "^6.0.3",
-    "vitest": "^2.1.9",
-    "vue-tsc": "^2.1.10"
+    "tailwindcss": "^4.3.0",
+    "typescript": "~6.0.3",
+    "vite": "^7.3.5",
+    "vitest": "^4.1.8",
+    "vue-tsc": "^3.3.4"
   },
   "description": "What Claude Code configuration is actually in effect, and why — a desktop diagnostic for the five config scopes."
 }
