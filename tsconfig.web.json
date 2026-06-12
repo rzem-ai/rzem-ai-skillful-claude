@@ -21,11 +21,10 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    /* Path aliases */
-    "baseUrl": ".",
+    /* Path aliases (resolved relative to this file; baseUrl removed — deprecated in TS 7.0) */
     "paths": {
-      "@/*": ["src/*"],
-      "@shared/*": ["electron/shared/*"]
+      "@/*": ["./src/*"],
+      "@shared/*": ["./electron/shared/*"]
     }
   },
   "include": [

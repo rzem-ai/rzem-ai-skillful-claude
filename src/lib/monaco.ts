@@ -5,8 +5,8 @@
 // Slim build: full editor feature set but only the two languages we render
 // (json + markdown) instead of monaco-editor's ~80-language default bundle.
 import 'monaco-editor/esm/vs/editor/editor.all.js';
-import 'monaco-editor/esm/vs/language/json/monaco.contribution';
-import 'monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution';
+import 'monaco-editor/esm/vs/language/json/monaco.contribution.js';
+import 'monaco-editor/esm/vs/basic-languages/markdown/markdown.contribution.js';
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
