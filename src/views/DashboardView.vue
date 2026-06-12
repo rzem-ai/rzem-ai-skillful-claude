@@ -121,7 +121,7 @@ onMounted(() => {
                             v-for="s in SCOPE_FILTERS"
                             :key="s"
                             class="cursor-pointer select-none"
-                            :class="{ 'opacity-[0.32] grayscale-[50%]': !activeScopes[s] }"
+                            :class="{ 'opacity-[0.32] grayscale-50': !activeScopes[s] }"
                             @click="toggleScope(s)">
                             <ProvenanceChip :scope="s" />
                         </span>
@@ -152,14 +152,14 @@ onMounted(() => {
                             <tr>
                                 <th class="w-[30%]">Key</th>
                                 <th class="w-[26%]">Resolved value</th>
-                                <th class="w-[84px]">Type</th>
-                                <th class="w-[130px]">Provenance</th>
+                                <th class="w-21">Type</th>
+                                <th class="w-32.5">Provenance</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-if="!rows.length">
-                                <td colspan="5" class="dim text-center py-[22px] px-3.5 text-xs">
+                                <td colspan="5" class="dim text-center py-5.5 px-3.5 text-xs">
                                     {{ config.loading ? 'Resolving configuration…' : 'No configuration keys in effect for the active scopes.' }}
                                 </td>
                             </tr>
@@ -275,12 +275,12 @@ onMounted(() => {
                                         <span v-if="c.status === 'winner'" class="win-pill">winner</span>
                                         <span v-else-if="c.status === 'ignored'" class="ignored-pill">ignored by rule</span>
                                     </div>
-                                    <div class="cm-note dim mt-[5px]">{{ c.path }} · {{ c.mod }}</div>
+                                    <div class="cm-note dim mt-1.25">{{ c.path }} · {{ c.mod }}</div>
                                     <div v-if="c.note" class="cm-note" :class="{ warn: c.status === 'ignored' }">
                                         <Icon v-if="c.status === 'ignored'" name="alert" :size="13" />
                                         <span>{{ c.note }}</span>
                                     </div>
-                                    <div v-if="c.action" class="mt-[7px]">
+                                    <div v-if="c.action" class="mt-1.75">
                                         <button class="btn sm" @click="chainAction(c.action)">
                                             {{ c.action }}
                                             <Icon name="arrow" :size="12" />
