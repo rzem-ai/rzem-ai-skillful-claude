@@ -55,8 +55,9 @@ preload wrapper, and `api.d.ts` together.
   (`--bg`, `--surface-1..4`), text (`--fg`, `--fg-muted`, `--fg-dim`), the app
   accent (`--accent`, teal — chrome only), the five reserved **scope colors**
   (`--scope-managed|cli|local|project|user`), semantic state colors, type scale
-  (`--t-cap|body|sec|view`), geometry, and layout dims. Light theme overrides
-  live under `:root[data-theme="light"]`. These tokens are bridged into Tailwind
+  (`--t-cap|body|sec|view`), geometry, and layout dims. Light is the default
+  theme (its values live in `:root`); dark theme overrides live under
+  `:root[data-theme="dark"]`. These tokens are bridged into Tailwind
   v4 via `@theme` in `src/styles/tailwind.css`, so utilities (`bg-surface-2`,
   `text-fg-muted`, `text-scope-user`) resolve to the same variables and inherit
   theme switching for free. **Style new components with Tailwind utilities bound

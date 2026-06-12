@@ -1,13 +1,13 @@
 import { ref } from 'vue';
 
 // Theme is stored on <html data-theme="..."> and persisted to localStorage.
-// Dark is the primary theme; light is a designed deliverable. Ported from
+// Light is the default theme; dark is an opt-in override. Ported from
 // the prototype's theme toggle (localStorage key kept app-scoped).
 
 const STORAGE_KEY = 'sc:theme';
 type Theme = 'dark' | 'light';
 
-const theme = ref<Theme>('dark');
+const theme = ref<Theme>('light');
 
 function apply(next: Theme): void {
     theme.value = next;
@@ -27,7 +27,7 @@ export function initTheme(): void {
     } catch {
         /* ignore */
     }
-    apply(stored ?? 'dark');
+    apply(stored ?? 'light');
 }
 
 export function useTheme() {

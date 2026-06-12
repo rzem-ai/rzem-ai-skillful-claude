@@ -94,7 +94,7 @@ function createWindow(): void {
         minWidth: 960,
         minHeight: 640,
         title: 'Skillful Claude',
-        backgroundColor: '#0b0b0d',
+        backgroundColor: '#f4f5f7',
         show: false,
         webPreferences: {
             // electron-vite emits the preload as ESM (.mjs). ESM preloads

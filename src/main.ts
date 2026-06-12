@@ -13,7 +13,7 @@ import './styles/app.css';
 // at runtime — avoids a flash of unstyled (oversized) icons on first paint.
 config.autoAddCss = false;
 
-// Apply persisted (or default dark) theme before mount so there's no flash.
+// Apply persisted (or default light) theme before mount so there's no flash.
 initTheme();
 
 createApp(App) //

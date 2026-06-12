@@ -1,47 +1,48 @@
 /* ============================================================================
    Skillful Claude — shared design system
-   Dark-first developer tooling. Serious diagnostic instrument, not a SaaS app.
+   Light-default developer tooling (dark via [data-theme="dark"]). Serious
+   diagnostic instrument, not a SaaS app.
    Density is a feature. Color is reserved for meaning (scope + semantic state).
    ============================================================================ */
 
 /* ---- Tokens --------------------------------------------------------------- */
 :root {
-  /* Neutral surfaces — near-black, stepped elevation, no pure black */
-  --bg: #131417;
+  /* Neutral surfaces — paper-white, stepped elevation, no pure black */
+  --bg: #f4f5f7;
   /* app background / deepest well */
-  --surface-1: #181a1e;
+  --surface-1: #ffffff;
   /* main panels */
-  --surface-2: #1e2024;
+  --surface-2: #fbfbfc;
   /* cards, toolbar, inspector */
-  --surface-3: #24272c;
+  --surface-3: #f0f1f4;
   /* inputs, raised rows, hover */
-  --surface-4: #2c3037;
+  --surface-4: #e7e9ed;
   /* active row, popovers */
-  --overlay: rgba(8, 9, 11, 0.66);
+  --overlay: rgba(20, 22, 28, 0.34);
 
   /* Hairlines */
-  --border: #2a2d33;
-  --border-soft: #222428;
-  --border-strong: #3a3e45;
+  --border: #e0e2e7;
+  --border-soft: #ebedf0;
+  --border-strong: #cfd3da;
 
-  /* Text — never pure white */
-  --fg: #e7e9ec;
-  --fg-muted: #9aa1a9;
-  --fg-dim: #6c737c;
-  --fg-faint: #4d535b;
+  /* Text — never pure black */
+  --fg: #1b1d21;
+  --fg-muted: #5b626b;
+  --fg-dim: #868d96;
+  --fg-faint: #aeb4bc;
 
-  /* App chrome accent — deliberately a teal/cyan, NOT any scope color.
+  /* App chrome accent — deliberately a blue, NOT any scope color.
      Used only for focus rings, active nav, primary actions. */
   --accent: #2B7FFF;
-  --accent-fg: #06181b;
-  --accent-soft: rgba(41, 182, 201, 0.14);
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(14, 141, 157, 0.12);
 
   /* Scope colors — the heart of the app. Reserved; never reused for chrome. */
   --scope-managed: #FB2C36;
   /* crimson  — lock */
-  --scope-cli: #FE9A00;
+  --scope-cli: #c87d0b;
   /* amber    — terminal */
-  --scope-local: #8E51FF;
+  --scope-local: #6c45e6;
   /* violet   — laptop */
   --scope-project: #2B7FFF;
   /* blue     — folder/repo */
@@ -50,26 +51,26 @@
 
   /* Semantic state — expressed as tint+icon to avoid scope-color collision */
   --ok: #00BC7D;
-  --ok-bg: rgba(61, 214, 140, 0.12);
-  --warn: #FE9A00;
-  --warn-bg: rgba(245, 166, 35, 0.13);
+  --ok-bg: rgba(19, 168, 102, .12);
+  --warn: #FF8904;
+  --warn-bg: rgba(185, 118, 10, .12);
   --err: #FB2C36;
-  --err-bg: rgba(229, 72, 77, 0.13);
+  --err-bg: rgba(207, 44, 49, .1);
   --info: #2B7FFF;
-  --info-bg: rgba(76, 141, 255, 0.12);
-  --inert: #6c737c;
-  --inert-bg: rgba(108, 115, 124, 0.12);
+  --info-bg: rgba(47, 111, 224, .1);
+  --inert: #7a818a;
+  --inert-bg: rgba(122, 129, 138, .12);
 
   /* Behaviour badges (permissions) */
   --deny: #FB2C36;
-  --ask: #FE9A00;
+  --ask: #FF8904;
   --allow: #00BC7D;
 
   /* JSON syntax colours (Raw Editor) */
-  --syntax-key: #8fd0ff;
-  --syntax-str: #9cdca0;
-  --syntax-num: #e6b673;
-  --syntax-kw: #c9a0ff;
+  --syntax-key: #0e6fc0;
+  --syntax-str: #18804a;
+  --syntax-num: #ad5f00;
+  --syntax-kw: #7a3fd4;
 
   /* Type */
   --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
@@ -96,50 +97,50 @@
   --sidebar-w: 222px;
   --inspector-w: 332px;
 
-  --shadow-pop: 0 10px 34px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --shadow-pop: 0 12px 32px rgba(20, 22, 28, 0.16);
 }
 
-/* Light theme — deliverable, designed second */
-:root[data-theme="light"] {
-  --bg: #f4f5f7;
-  --surface-1: #ffffff;
-  --surface-2: #fbfbfc;
-  --surface-3: #f0f1f4;
-  --surface-4: #e7e9ed;
-  --overlay: rgba(20, 22, 28, 0.34);
-  --border: #e0e2e7;
-  --border-soft: #ebedf0;
-  --border-strong: #cfd3da;
-  --fg: #1b1d21;
-  --fg-muted: #5b626b;
-  --fg-dim: #868d96;
-  --fg-faint: #aeb4bc;
+/* Dark theme — opt-in override (near-black, never pure white) */
+:root[data-theme="dark"] {
+  --bg: #131417;
+  --surface-1: #181a1e;
+  --surface-2: #1e2024;
+  --surface-3: #24272c;
+  --surface-4: #2c3037;
+  --overlay: rgba(8, 9, 11, 0.66);
+  --border: #2a2d33;
+  --border-soft: #222428;
+  --border-strong: #3a3e45;
+  --fg: #e7e9ec;
+  --fg-muted: #9aa1a9;
+  --fg-dim: #6c737c;
+  --fg-faint: #4d535b;
   --accent: #2B7FFF;
-  --accent-fg: #ffffff;
-  --accent-soft: rgba(14, 141, 157, 0.12);
+  --accent-fg: #06181b;
+  --accent-soft: rgba(41, 182, 201, 0.14);
   --scope-managed: #FB2C36;
-  --scope-cli: #c87d0b;
-  --scope-local: #6c45e6;
+  --scope-cli: #FE9A00;
+  --scope-local: #8E51FF;
   --scope-project: #2B7FFF;
   --scope-user: #00BC7D;
   --ok: #00BC7D;
-  --warn: #FF8904;
+  --ok-bg: rgba(61, 214, 140, 0.12);
+  --warn: #FE9A00;
+  --warn-bg: rgba(245, 166, 35, 0.13);
   --err: #FB2C36;
+  --err-bg: rgba(229, 72, 77, 0.13);
   --info: #2B7FFF;
-  --inert: #7a818a;
-  --ok-bg: rgba(19, 168, 102, .12);
-  --warn-bg: rgba(185, 118, 10, .12);
-  --err-bg: rgba(207, 44, 49, .1);
-  --info-bg: rgba(47, 111, 224, .1);
-  --inert-bg: rgba(122, 129, 138, .12);
+  --info-bg: rgba(76, 141, 255, 0.12);
+  --inert: #6c737c;
+  --inert-bg: rgba(108, 115, 124, 0.12);
   --deny: #FB2C36;
-  --ask: #FF8904;
+  --ask: #FE9A00;
   --allow: #00BC7D;
-  --syntax-key: #0e6fc0;
-  --syntax-str: #18804a;
-  --syntax-num: #ad5f00;
-  --syntax-kw: #7a3fd4;
-  --shadow-pop: 0 12px 32px rgba(20, 22, 28, 0.16);
+  --syntax-key: #8fd0ff;
+  --syntax-str: #9cdca0;
+  --syntax-num: #e6b673;
+  --syntax-kw: #c9a0ff;
+  --shadow-pop: 0 10px 34px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
 }
 
 * {
